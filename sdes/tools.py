@@ -11,6 +11,9 @@ import seaborn as sb
 import inspect
 import arviz as az
 import time
+import collections
+
+MeanAndCov = collections.namedtuple("MeanAndCov", "mean cov")
 
 def log_abs_det(A):
     """
@@ -67,6 +70,126 @@ def method_match_first_dim(method):
             new_args[idx] = arg
         return method(self, *args)
     return new_func
+
+def filter_step_var_cov(G, varY, pred, yt):
+    """
+    Parameters
+    ----------
+    G:  float
+        mean of Y_t | X_t is G * X_t
+    varY: float 
+        variance of Y_t | X_t
+    pred: MeanAndCov object
+        predictive distribution at time t
+        The mean is an (N, ) array, and the variance is an (N, ) array.
+    yt: float
+        The observation at time t
+
+    Returns
+    ----------
+
+    pred: MeanAndCov object
+        filtering distribution at time t    
+    """
+    pred_mean = pred.mean; pred_var = pred.cov
+    opt_prop_mean = pred_mean + (G*pred_var)/((G*pred_var) + varY) * (yt - G*pred_mean)
+    opt_prop_var = pred_var * (1 - (G*pred_var)/((G*pred_var) + varY))
+    return MeanAndCov(loc=opt_prop_mean, cov=opt_prop_var)
+
+def mv_filter_step_var_cov(G, CovY, pred, yt):
+    """
+    Version of the function `filter_step_as_array' in the particles.kalman module that 
+    can take as input a different covariance matrix for each particle.
+
+    For standard (discrete-discrete) state space models, it is usually the case that the 
+    covariance matrix does not depend on the previous particle. This is how the standard
+    LGSSM is implemented in the MVLinearGauss class of the particles package. 
+    
+    For continuous-distrete state space models, if the diffusion coefficient of the model 
+    sde is state-dependent, then its transition density (and thus any choice of proxy) will
+    depend on the covariance matrix. Thus, this implementation is necessary to deal with these 
+    cases.
+
+    We input the mean and covariance of X_t | X_{t-1} in the `pred` input, and the observation 
+    density Y_t | X_t through inputs G and CovY. We also give the observation y_t.
+    
+    We return the distribution of X_t | Y_t = y_t in the form of a MeanAndCov object. 
+
+    Parameters
+    ----------
+    G:  (dy, dx) numpy array
+        mean of Y_t | X_t is G * X_t
+    covY: (dy, dy) numpy array
+        covariance of Y_t | X_t
+    pred: MeanAndCov object
+        predictive distribution at time t
+        The mean is an (N, dx) array, and the covariance is an (N, dx, dx) array.
+    yt: (dy, ) numpy array: The observation at time t
+
+    Returns
+    ----------
+
+    pred: MeanAndCov object
+        filtering distribution at time t    
+    """    
+    N = pred.mean.shape[0]; G = np.stack([G]*N); CovY = np.stack([CovY]*N); yt = np.stack([yt]*N) # (N, dimY, dimX), (N, dimY, dimY), (N, dimY)
+    jt_mu_x = pred.mean; jt_cov_x = pred.cov; # (N, dimX), (N, dimX, dimX)
+    jt_mu_y = np.einsum('ijk,ik->ij', G, jt_mu_x) # (N, dimY, dimX), (N, dimX) -> (N, dimY)
+    jt_cov_xy = np.einsum('ijk,ilk->ijl', jt_cov_x, G) # (N, dimX, dimX), (N, dimY, dimX) -> (N, dimX, dimY)
+    jt_cov_yx = np.einsum('ijk->ikj', jt_cov_xy) # (N, dimY, dimX)
+    jt_cov_y =  np.einsum('ijk,ikl->ijl', G, jt_cov_xy) + CovY # (N, dimY, dimX), (N, dimX, dimY) -> (N, dimY, dimY)
+    opt_prop_loc = jt_mu_x + np.einsum('ijk,ik->ij', jt_cov_xy, nla.solve(jt_cov_y, yt - jt_mu_y)) # (N, dimX)
+    opt_prop_cov = nla.solve(jt_cov_y, jt_cov_yx) # (N, dimY, dimX)
+    opt_prop_cov = jt_cov_x - np.einsum('ijk,ikl->ijl', jt_cov_xy, opt_prop_cov) # (N, dimX, dimY) (N, dimY, dimX) -> (N, dimX, dimX)
+    return MeanAndCov(mean=opt_prop_loc, cov=opt_prop_cov)
+
+
+def optimal_proposal_dist(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: float, sigmaY: float):
+    """
+    Proposal for the end point using the exact distribution $E_t | E_{t-1}=e_{t-1}, Y_t = y_t$ from a Linear SDE.
+    x_s: float / (N, )
+    y_t: (1, )/ (1, dimY)
+    LY: float / (dimY, 1)
+    sigmaY: float / (dimY, dimY)
+    """    
+    a = self._a(s, t); b = self._b(s, t); v = self._v(s,t); sigmaY_sq = sigmaY ** 2
+    opt_prop_mean = (a*x_s + b) + (LY*v)/((LY*v) + sigmaY_sq) * (y_t - LY*(a*x_s+b))
+    opt_prop_var = v * (1 - (LY*v)/((LY*v) + sigmaY_sq))
+    return Normal(loc=opt_prop_mean, scale=np.sqrt(opt_prop_var))
+    
+def filter_step_asarray(G, covY, pred, yt):
+    """Filtering step of Kalman filter: array version.
+
+    Parameters
+    ----------
+    G:  (dy, dx) numpy array
+        mean of Y_t | X_t is G * X_t
+    covX: (dx, dx) numpy array
+        covariance of Y_t | X_t
+    pred: MeanAndCov object
+        predictive distribution at time t
+
+    Returns
+    -------
+    pred: MeanAndCov object
+        filtering distribution at time t
+    logpyt: float
+        log density of Y_t | Y_{0:t-1}
+
+    Note
+    ----
+    This performs the filtering step for N distinctive predictive means:
+    filt.mean should be a (N, dx) or (N) array; pred.mean in the output
+    will have the same shape.
+
+    """
+    pm = pred.mean[:, np.newaxis] if pred.mean.ndim == 1 else pred.mean
+    new_pred = MeanAndCov(mean=pm, cov=pred.cov)
+    filt, logpyt = filter_step(G, covY, new_pred, yt)
+    if pred.mean.ndim == 1:
+        filt.mean.squeeze()
+    return filt, logpyt
+
 
 # @match_first_dim
 def mv_grad_log_linear_gaussian(x_s: np.ndarray, x_t: np.ndarray, A: np.ndarray, b: np.ndarray, S: np.ndarray) -> np.ndarray:

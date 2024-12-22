@@ -14,11 +14,11 @@ and we need to provide the number of imputed points for simulation of SDEs.
 We have the following Feynman-Kac formalisms of continuous-discrete state space models: These are instances of CDSSM_FeynmanKac:
 
 - Bootstrap DA
-- BootstrapReparameterisedDA - provide an auxiliary_bridge_cls
-- ForwardGuidedDA - provide a proposal_sde_cls
-- BackwardGuidedDA - provide an end_pt_proposal_sde_cls, auxiliary_bridge_cls
-- ForwardGuidedReparameterisedDA - provide a proposal_sde_cls, auxiliary_bridge_cls
-- BackwardGuidedReparameterisedDA - provide a end_pt_proposal_sde_cls, auxiliary_bridge_cls # Only option for hypoelliptic case.
+- BootstrapReparameterisedDA - provide an AuxiliaryBridge class
+- ForwardGuidedDA - provide a ForwardProposal class
+- BackwardGuidedDA - provide an EndPointProposal class, AuxiliaryBridge class
+- ForwardGuidedReparameterisedDA - provide a ForwardProposal class, AuxiliaryBridge class
+- BackwardGuidedReparameterisedDA - provide an EndPointProposal class, AuxiliaryBridge class # Only option for hypoelliptic case.
 
 We provide to the __init__ method of these classes:
 
@@ -59,10 +59,13 @@ from particles.resampling import wmean_and_var
 from particles.collectors import default_collector_cls, Moments
  
 from sdes.continuous_discrete_ssms import CDSSM
-from sdes.sdes import BrownianMotion, MvIndepBrownianMotion, MvSDE
-from sdes.auxiliary_bridges import univ_forward_proposals, univ_auxiliary_bridges, mv_forward_proposals, mv_auxiliary_bridges
-from sdes.auxiliary_bridges import LocalLinearOUProp, DelyonHuAuxBridge
-from sdes.auxiliary_bridges import MvDelyonHuAuxBridge, MvOUProposal
+from sdes.sdes import BrownianMotion, MvIndepBrownianMotion, MvSDE, HypoellipticSDE
+from sdes.auxiliary_bridges import univ_forward_proposals, mv_forward_proposals
+from sdes.auxiliary_bridges import univ_auxiliary_bridges, mv_auxiliary_bridges, integrated_auxiliary_bridges, twice_integrated_auxiliary_bridges
+from sdes.auxiliary_bridges import univ_end_point_proposals, mv_end_point_proposals, integrated_end_point_proposals, twice_integrated_end_point_proposals
+from sdes.auxiliary_bridges import LocalLinearOUProp, MvOUProposal
+from sdes.auxiliary_bridges import DelyonHuAuxBridge, MvDelyonHuAuxBridge, IntegratedDriftBrownianAuxBridge, TwiceIntegratedDriftBrownianAuxBridge
+from sdes.auxiliary_bridges import EulerMaruyamaEndPointProposal, MvEulerMaruyamaEndPointProposal, IntegratedDriftBrownianEndPointProposal, TwiceIntegratedDriftBrownianEndPointProposal 
 from sdes.collectors import default_add_funcs
 
 class CDSSM_FeynmanKac(FeynmanKac):
@@ -304,6 +307,8 @@ class ForwardGuidedDA(BootstrapDA):
     cls_sname = 'FwG'
     
     def __init__(self, cdssm=None, data=None, proposal_sde_cls=None):
+        if isinstance(self.cdssm.sde, HypoellipticSDE):
+            raise ValueError('Forward Guided Feynman Kac model is not yet implemented for hypoelliptic SDEs')
         super().__init__(cdssm=cdssm, data=data)
         self.proposal_sde_cls = self.default_proposal_sde_cls if proposal_sde_cls is None else proposal_sde_cls
 
@@ -330,12 +335,12 @@ class ForwardGuidedDA(BootstrapDA):
         return MvOUProposal if self.dimX > 1 else LocalLinearOUProp
 
     def M0(self, N):                            
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
-        return self.proposal_sde.simulate(N, self.cdssm.x0, num=self.num)
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.x0, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
+        return self.proposal_sde.simulate(N, num=self.num)
         
     def M(self, t, xp):
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-        return self.proposal_sde.simulate(xp.shape[0], xp[self.t_end], num=self.num)
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, xp[self.t_end], self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        return self.proposal_sde.simulate(xp.shape[0], num=self.num)
 
     def logG(self, t, xp, x):
         self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
@@ -353,13 +358,7 @@ class ForwardGuidedDA(BootstrapDA):
 class BackwardGuidedDA(BootstrapDA):
     """
     Guided Backward Proposals, using as an example, the Delyon-Hu bridge:
-
-    Simulation of the end point:
-
-    Can either use the `optimal_proposal_dist` when the model SDE is a linear SDE, or
-    can use the `euler_proposal_dist` when the model SDE is a general SDE.
     """
-
     cls_sname = 'BwG'
     
     def __init__(self, cdssm=None, data=None, end_pt_proposal_sde_cls=None, auxiliary_bridge_cls=None):
@@ -433,11 +432,8 @@ class BackwardGuidedDA(BootstrapDA):
         return obs_density_logpdf + bridge_log_likelihood - end_pt_prop_logpdf
     
     def _end_point_proposal_dist(self, t, x_start):
-        if self.end_pt_proposal_sde_cls:
-            end_point_proposal_sde = self.end_pt_proposal_sde_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), self.data[int(t)], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-            end_point_proposal_dist = end_point_proposal_sde.end_point_proposal(x_start)
-        else:
-            end_point_proposal_dist = self.model_sde.euler_proposal_dist(self.cdssm.s(t), self.cdssm.s(t+1), x_start, self.y, self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_point_proposal_sde = self.end_pt_proposal_sde_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), self.data[int(t)], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_point_proposal_dist = end_point_proposal_sde.end_point_proposal(x_start)
         return end_point_proposal_dist
 
 class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
@@ -454,6 +450,8 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
     cls_sname = 'FwR'
     
     def __init__(self, cdssm=None, data=None, proposal_sde_cls=None, auxiliary_bridge_cls=None):
+        if isinstance(self.cdssm.sde, HypoellipticSDE):
+            raise ValueError('Forward Reparametered Feynman Kac models cannot be constructed for hypoelliptic SDEs')
         ForwardGuidedDA.__init__(self, cdssm=cdssm, data=data, proposal_sde_cls=proposal_sde_cls)
         self.auxiliary_bridge_cls = self.default_auxiliary_bridge_cls if auxiliary_bridge_cls is None else auxiliary_bridge_cls
 
@@ -464,10 +462,9 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
         fw_prop_ext = self.proposal_sde_cls.sname if self.dimX == 1 else self.proposal_sde_cls.sname[2:]
         return name + '_' + bridge_ext + '_' + fw_prop_ext
 
-
     def M0(self, N):
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
-        X = self.proposal_sde.simulate(N, self.cdssm.x0, num=self.num)
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.x0, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
+        X = self.proposal_sde.simulate(N, num=self.num)
         end_points = X[self.t_end]
         self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(1) - self.cdssm.s(0), end_points)
         x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
@@ -475,20 +472,19 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
         
     def M(self, t, xp):
         x_start = xp[self.t_end]; N = xp[self.t_end].shape[0]
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-        X = self.proposal_sde.simulate(N, x_start, num=self.num)
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        X = self.proposal_sde.simulate(N, num=self.num)
         end_points = X[self.t_end]
         self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), end_points)
         return self.auxiliary_bridge.transform_X_to_W(X, x_start)
 
     def logG(self, t, xp, x):
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         if t == 0:
             N = x[self.t_end].shape[0]
             x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
         else:
             x_start = xp[self.t_end]
-        self.proposal_sde.build_linear_sde(x_start=x_start)
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         obs_density_logpdf = self.cdssm.PY(t, xp, x[self.t_end]).logpdf(self.data[t])
         end_points = x[self.t_end]
         self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), end_points)
@@ -507,8 +503,7 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
             x_start = np.array([x_start])
         # N = x_start.shape[0] It shouldn't be necessary to modify the x process.
         # x = np.stack([x]*N)
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-        self.proposal_sde.build_linear_sde(x_start=x_start)
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         x_end = x[self.t_end] if self.dimX == 1 else x[self.t_end].reshape((N, self.dimX))
         self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), x_end)
         x = self.auxiliary_bridge.transform_W_to_X(x, x_start)
@@ -526,9 +521,8 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
         M = X[0][self.t_end].shape[0]
         for t in range(len(X)):
             x_start = np.ones(M)*self.cdssm.x0 if t == 0 else X[t-1][self.t_end]            
-            proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-            proposal_sde.build_linear_sde(x_start=x_start)
-            self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), X[t][self.t_end])
+            proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+            self.auxiliary_bridge = self.auxiliary_bridge_cls(proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), X[t][self.t_end])
             inv_transformed_X[t] = self.auxiliary_bridge.transform_W_to_X(X[t], x_start)
         return inv_transformed_X
 
@@ -541,8 +535,7 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
         inv_transformed_X = X.copy(); T = X.shape[0]
         for t in range(T):
             x_start = np.array([self.cdssm.x0]) if t == 0 else np.array([X[t-1][self.t_end]])
-            proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-            proposal_sde.build_linear_sde(x_start=x_start)
+            proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
             self.auxiliary_bridge = self.auxiliary_bridge_cls(proposal_sde, self.cdssm.s(t), self.cdssm.s(t+1), X[t][self.t_end])
             inv_transformed_X[t] = self.auxiliary_bridge.transform_W_to_X(X[t:t+1], x_start)
         return inv_transformed_X
