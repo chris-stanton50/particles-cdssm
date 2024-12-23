@@ -33,22 +33,26 @@ Each of these classes have the class methods:
 'auxiliary_bridge_cls_options'
 'univ_auxiliary_bridge_cls_options'
 'mv_auxiliary_bridge_cls_options'
+'integrated_auxiliary_bridge_cls_options'
+'twice_integrated_auxiliary_bridge_cls_options'
 
 'proposal_sde_cls_options'
 'univ_proposal_sde_cls_options'
 'mv_proposal_sde_cls_options'
 
-'end_pt_proposal_sde_cls_options'
-'univ_end_pt_proposal_sde_cls_options'
-'mv_end_pt_proposal_sde_cls_options'
+'end_pt_proposal_cls_options'
+'univ_end_pt_proposal_cls_options'
+'mv_end_pt_proposal_cls_options'
+'integrated_end_pt_proposal_cls_options'
+'twice_integrated_end_pt_proposal_cls_options'
 
 These methods return dictionaries of the available classes that can be used for the respective roles.
 
 Currently, the default choices are:
 
 - Forward Proposals: LocalLinearOUProp/ MvOUProposal
-- end_pt_proposal_sde_cls: LocalLinearOUProp/ MvOUProposal
-- auxiliary_bridge_cls: DelyonHuAuxBridge/ MvDelyonHuAuxBridge
+- end_pt_proposal_cls: LocalLinearOUProp/ MvOUProposal / IntegratedDriftBrownianEndPointProposal/ TwiceIntegratedDriftBrownianEndPointProposal
+- auxiliary_bridge_cls: DelyonHuAuxBridge/ MvDelyonHuAuxBridge / IntegratedDriftBrownianAuxBridge/ TwiceIntegratedDriftBrownianAuxBridge
 """
 
 import numpy as np
@@ -59,13 +63,13 @@ from particles.resampling import wmean_and_var
 from particles.collectors import default_collector_cls, Moments
  
 from sdes.continuous_discrete_ssms import CDSSM
-from sdes.sdes import BrownianMotion, MvIndepBrownianMotion, MvSDE, HypoellipticSDE
+from sdes.sdes import BrownianMotion, MvIndepBrownianMotion, MvSDE, MvEllipticSDE, HypoellipticSDE, IntegratedSDE, TwiceIntegratedSDE
 from sdes.auxiliary_bridges import univ_forward_proposals, mv_forward_proposals
 from sdes.auxiliary_bridges import univ_auxiliary_bridges, mv_auxiliary_bridges, integrated_auxiliary_bridges, twice_integrated_auxiliary_bridges
 from sdes.auxiliary_bridges import univ_end_point_proposals, mv_end_point_proposals, integrated_end_point_proposals, twice_integrated_end_point_proposals
 from sdes.auxiliary_bridges import LocalLinearOUProp, MvOUProposal
 from sdes.auxiliary_bridges import DelyonHuAuxBridge, MvDelyonHuAuxBridge, IntegratedDriftBrownianAuxBridge, TwiceIntegratedDriftBrownianAuxBridge
-from sdes.auxiliary_bridges import EulerMaruyamaEndPointProposal, MvEulerMaruyamaEndPointProposal, IntegratedDriftBrownianEndPointProposal, TwiceIntegratedDriftBrownianEndPointProposal 
+from sdes.auxiliary_bridges import EulerMaruyamaEndPointProposal, MvEulerMaruyamaEndPointProposal, IntegratedDriftBrownianEndPointProposal, TwiceIntegratedDriftBrownianEndPointProposal
 from sdes.collectors import default_add_funcs
 
 class CDSSM_FeynmanKac(FeynmanKac):
@@ -78,6 +82,7 @@ class CDSSM_FeynmanKac(FeynmanKac):
         self.cdssm.T = self.T
         self.model_sde = self.cdssm.model_sde
         self.dimX = self.cdssm.model_sde.dimX
+        self.dimW = self.cdssm.model_sde.dimW
         self._check_CDSSM_FK(cdssm)
         
     def _check_CDSSM_FK(self, cdssm):
@@ -151,7 +156,6 @@ class BootstrapDA(CDSSM_FeynmanKac):
 
     class BootstrapDA_OU(BootstrapDA):
         ModelSDECls = OrnsteinUhlenbeck
-
     """    
     
     cls_sname = 'BootstrapDA'
@@ -307,9 +311,9 @@ class ForwardGuidedDA(BootstrapDA):
     cls_sname = 'FwG'
     
     def __init__(self, cdssm=None, data=None, proposal_sde_cls=None):
-        if isinstance(self.cdssm.sde, HypoellipticSDE):
-            raise ValueError('Forward Guided Feynman Kac model is not yet implemented for hypoelliptic SDEs')
         super().__init__(cdssm=cdssm, data=data)
+        if isinstance(self.cdssm.model_sde, HypoellipticSDE):
+            raise ValueError('Forward Guided Feynman Kac model is not yet implemented for hypoelliptic SDEs')
         self.proposal_sde_cls = self.default_proposal_sde_cls if proposal_sde_cls is None else proposal_sde_cls
 
     @property
@@ -357,41 +361,64 @@ class ForwardGuidedDA(BootstrapDA):
     
 class BackwardGuidedDA(BootstrapDA):
     """
-    Guided Backward Proposals, using as an example, the Delyon-Hu bridge:
+    Guided Backward Proposals
     """
     cls_sname = 'BwG'
     
-    def __init__(self, cdssm=None, data=None, end_pt_proposal_sde_cls=None, auxiliary_bridge_cls=None):
+    def __init__(self, cdssm=None, data=None, end_pt_proposal_cls=None, auxiliary_bridge_cls=None):
         super().__init__(cdssm=cdssm, data=data)
-        self.end_pt_proposal_sde_cls = self.default_end_pt_proposal_sde_cls if end_pt_proposal_sde_cls is None else end_pt_proposal_sde_cls
+        self.end_pt_proposal_cls = self.default_end_pt_proposal_cls if end_pt_proposal_cls is None else end_pt_proposal_cls
         self.auxiliary_bridge_cls = self.default_auxiliary_bridge_cls if auxiliary_bridge_cls is None else auxiliary_bridge_cls
 
     @property
     def sname(self):
         name = self.cls_sname
         bridge_ext = self.auxiliary_bridge_cls.sname if self.dimX == 1 else self.auxiliary_bridge_cls.sname[2:]
-        end_pt_prop_ext = self.end_pt_proposal_sde_cls.sname if self.dimX == 1 else self.end_pt_proposal_sde_cls.sname[2:]
+        end_pt_prop_ext = self.end_pt_proposal_cls.sname if self.dimX == 1 else self.end_pt_proposal_cls.sname[2:]
         return name + '_' + bridge_ext + '_' + end_pt_prop_ext
 
     @classmethod
-    def end_pt_proposal_sde_cls_options(cls):
-        return {**cls.univ_end_pt_proposal_sde_cls_options(), **cls.mv_end_pt_proposal_sde_cls_options()}
+    def end_pt_proposal_cls_options(cls):
+        return {**cls.univ_end_pt_proposal_cls_options(),
+                **cls.mv_end_pt_proposal_cls_options(),
+                **cls.integrated_end_pt_proposal_cls_options(),
+                **cls.twice_integrated_end_pt_proposal_cls_options()
+                }
 
     @classmethod
-    def univ_end_pt_proposal_sde_cls_options(cls):
-        return {cls.__name__: cls for cls in univ_forward_proposals}
+    def univ_end_pt_proposal_cls_options(cls):
+        return {cls.__name__: cls for cls in univ_end_point_proposals}
 
     @classmethod
-    def mv_end_pt_proposal_sde_cls_options(cls):
-        return {cls.__name__: cls for cls in mv_forward_proposals}
+    def mv_end_pt_proposal_cls_options(cls):
+        return {cls.__name__: cls for cls in mv_end_point_proposals}
+
+    @classmethod
+    def integrated_end_pt_proposal_cls_options(cls):
+        return {cls.__name__: cls for cls in integrated_end_point_proposals}
+    
+    @classmethod
+    def twice_integrated_end_pt_proposal_cls_options(cls):
+        return {cls.__name__: cls for cls in twice_integrated_end_point_proposals}
 
     @property
-    def default_end_pt_proposal_sde_cls(self):
-        return MvOUProposal if self.dimX > 1 else LocalLinearOUProp
+    def default_end_pt_proposal_cls(self):
+        if isinstance(self.cdssm.model_sde, IntegratedSDE):
+            return IntegratedDriftBrownianEndPointProposal
+        if isinstance(self.cdssm.model_sde, TwiceIntegratedSDE):
+            return TwiceIntegratedDriftBrownianEndPointProposal
+        if isinstance(self.cdssm.model_sde, MvEllipticSDE):
+            return MvEulerMaruyamaEndPointProposal
+        else:
+            return EulerMaruyamaEndPointProposal
 
     @classmethod
     def auxiliary_bridge_cls_options(cls):
-        return {**cls.univ_auxiliary_bridge_cls_options(), **cls.mv_auxiliary_bridge_cls_options()}
+        return {**cls.univ_auxiliary_bridge_cls_options(),
+                **cls.mv_auxiliary_bridge_cls_options(),
+                **cls.integrated_auxiliary_bridge_cls_options(),
+                **cls.twice_integrated_auxiliary_bridge_cls_options()
+                }
 
     @classmethod
     def univ_auxiliary_bridge_cls_options(cls):
@@ -401,20 +428,35 @@ class BackwardGuidedDA(BootstrapDA):
     def mv_auxiliary_bridge_cls_options(cls):
         return {cls.__name__: cls for cls in mv_auxiliary_bridges}
 
+    @classmethod
+    def integrated_auxiliary_bridge_cls_options(cls):
+        return {cls.__name__: cls for cls in integrated_auxiliary_bridges}
+
+    @classmethod
+    def twice_integrated_auxiliary_bridge_cls_options(cls):
+        return {cls.__name__: cls for cls in twice_integrated_auxiliary_bridges}
+
     @property
     def default_auxiliary_bridge_cls(self):
-        return MvDelyonHuAuxBridge if self.dimX > 1 else DelyonHuAuxBridge
+        if isinstance(self.cdssm.model_sde, IntegratedSDE):
+            return IntegratedDriftBrownianAuxBridge
+        if isinstance(self.cdssm.model_sde, TwiceIntegratedSDE):
+            return TwiceIntegratedDriftBrownianAuxBridge
+        if isinstance(self.cdssm.model_sde, MvEllipticSDE):
+            return MvDelyonHuAuxBridge
+        else:
+            return DelyonHuAuxBridge
 
     def M0(self, N):
-        end_point_proposal_dist = self._end_point_proposal_dist(0., self.cdssm.x0)
-        end_points = end_point_proposal_dist.rvs(N)                         
+        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, self.cdssm.x0, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
+        end_points = end_point_proposal.rvs(N)
         self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(0), self.cdssm.s(1), end_points)
         return self.auxiliary_bridge.simulate(N, self.cdssm.x0, num=self.num)
         
     def M(self, t, xp):
         N = xp[self.t_end].shape[0]
-        end_point_proposal_dist = self._end_point_proposal_dist(t, xp[self.t_end])
-        end_points = end_point_proposal_dist.rvs(N)                         
+        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, xp[self.t_end], self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_points = end_point_proposal.rvs(N)
         self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), end_points)
         return self.auxiliary_bridge.simulate(N, xp[self.t_end], num=self.num)
 
@@ -425,16 +467,11 @@ class BackwardGuidedDA(BootstrapDA):
             x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
         else:
             x_start = xp[self.t_end] 
-        end_point_proposal_dist = self._end_point_proposal_dist(t, x_start)
-        end_pt_prop_logpdf = end_point_proposal_dist.logpdf(x[self.t_end])
+        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, x_start, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_pt_prop_logpdf = end_point_proposal.logpdf(x[self.t_end])
         obs_density_logpdf = self.cdssm.PY(t, xp, x[self.t_end]).logpdf(self.data[t])
         bridge_log_likelihood = self.auxiliary_bridge.bridge_log_likelihood(x_start, x)
         return obs_density_logpdf + bridge_log_likelihood - end_pt_prop_logpdf
-    
-    def _end_point_proposal_dist(self, t, x_start):
-        end_point_proposal_sde = self.end_pt_proposal_sde_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), self.data[int(t)], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-        end_point_proposal_dist = end_point_proposal_sde.end_point_proposal(x_start)
-        return end_point_proposal_dist
 
 class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
     """ Data Augmentation of forward proposals
@@ -450,9 +487,9 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
     cls_sname = 'FwR'
     
     def __init__(self, cdssm=None, data=None, proposal_sde_cls=None, auxiliary_bridge_cls=None):
-        if isinstance(self.cdssm.sde, HypoellipticSDE):
-            raise ValueError('Forward Reparametered Feynman Kac models cannot be constructed for hypoelliptic SDEs')
         ForwardGuidedDA.__init__(self, cdssm=cdssm, data=data, proposal_sde_cls=proposal_sde_cls)
+        if isinstance(self.cdssm.model_sde, HypoellipticSDE):
+            raise ValueError('Forward Reparametered Feynman Kac models cannot be constructed for hypoelliptic SDEs')
         self.auxiliary_bridge_cls = self.default_auxiliary_bridge_cls if auxiliary_bridge_cls is None else auxiliary_bridge_cls
 
     @property
@@ -545,28 +582,28 @@ class BackwardReparameterisedDA(BackwardGuidedDA, BootstrapReparameterisedDA):
 
     cls_sname = 'BwR'
     
-    def __init__(self, cdssm=None, data=None, end_pt_proposal_sde_cls=None, auxiliary_bridge_cls=None):
-        super().__init__(cdssm=cdssm, data=data, end_pt_proposal_sde_cls=end_pt_proposal_sde_cls, auxiliary_bridge_cls=auxiliary_bridge_cls)
-        self.brownian_motion = MvIndepBrownianMotion(dimX=self.dimX) if self.dimX > 1 else BrownianMotion()
+    def __init__(self, cdssm=None, data=None, end_pt_proposal_cls=None, auxiliary_bridge_cls=None):
+        super().__init__(cdssm=cdssm, data=data, end_pt_proposal_cls=end_pt_proposal_cls, auxiliary_bridge_cls=auxiliary_bridge_cls)
+        self.brownian_motion = MvIndepBrownianMotion(dimX=self.cdssm.model_sde.dimW) if self.dimX > 1 else BrownianMotion()
 
     @property
     def sname(self):
         name = self.cls_sname
         bridge_ext = self.auxiliary_bridge_cls.sname if self.dimX == 1 else self.auxiliary_bridge_cls.sname[2:]
-        end_pt_prop_ext = self.end_pt_proposal_sde_cls.sname if self.dimX == 1 else self.end_pt_proposal_sde_cls.sname[2:]
+        end_pt_prop_ext = self.end_pt_proposal_cls.sname if self.dimX == 1 else self.end_pt_proposal_cls.sname[2:]
         return name + '_' + bridge_ext + '_' + end_pt_prop_ext
 
     def M0(self, N):
-        end_point_proposal_dist = self._end_point_proposal_dist(0., self.cdssm.x0)
-        end_points = end_point_proposal_dist.rvs(N)        
+        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, self.cdssm.x0, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
+        end_points = end_point_proposal.rvs(N)
         W = self._simulate_W(N, self.cdssm.s(1) - self.cdssm.s(0))
         W[self.t_end] = end_points
         return W
 
     def M(self, t, xp):
         N = xp[self.t_end].shape[0]
-        end_point_proposal_dist = self._end_point_proposal_dist(t, xp[self.t_end])
-        end_points = end_point_proposal_dist.rvs(N)
+        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, xp[self.t_end], self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_points = end_point_proposal.rvs(N)
         W = self._simulate_W(N, self.cdssm.s(t+1) - self.cdssm.s(t))
         W[self.t_end] = end_points                      
         return W
@@ -608,7 +645,7 @@ class BackwardReparameterisedDA(BackwardGuidedDA, BootstrapReparameterisedDA):
         return bridge_log_likelihood
 
     def _simulate_W(self, N, t_diff):
-        x_start = np.zeros((N, self.dimX)) if self.dimX > 1 else 0.
+        x_start = np.zeros((N, self.dimW)) if self.dimW > 1 else 0.
         W = self.brownian_motion.simulate(N, x_start, 0., t_diff, num=self.num)
         return W
     
@@ -622,13 +659,13 @@ def gen_all_fk_models(cdssm, data, smoothing=False):
     Stores in a dictionary that can be fed as an input to the MultiSMC funciton.
     """
     all_fk_models = {}
-    proposal_kwarg_names = ['auxiliary_bridge_cls', 'proposal_sde_cls', 'end_pt_proposal_sde_cls']
+    proposal_kwarg_names = ['auxiliary_bridge_cls', 'proposal_sde_cls', 'end_pt_proposal_cls']
     fk_classes = FK_SMOOTHING_CLASSES if smoothing else FK_CLASSES
     # Construct all possible Feynman-kac models with the constructions built in the package:
-    univ_or_mv = 'mv_' if isinstance(cdssm.model_sde, MvSDE) else 'univ_'
+    sde_type_str = sde_type(cdssm.model_sde) + '_'
     for fk_cls in fk_classes:
         fk_models = {}
-        options_dicts =  {name: getattr(fk_cls, univ_or_mv + name + '_options')() 
+        options_dicts =  {name: getattr(fk_cls, sde_type_str + name + '_options')() 
                         for name in proposal_kwarg_names if hasattr(fk_cls, name + '_options')}
         fk_kwargs = {'cdssm': cdssm, 'data': data}
         fk_models = _gen_fk_models_rec(fk_models, options_dicts, fk_cls, fk_cls.cls_sname, fk_kwargs)
@@ -639,11 +676,13 @@ def _gen_fk_models_rec(fk_models, options_dicts, curr_fk_cls, curr_fk_name, curr
     if not options_dicts:
         fk_models[curr_fk_name] = curr_fk_cls(**curr_fk_kwargs)
         return fk_models
+    model_sde = curr_fk_kwargs['cdssm'].model_sde
     name = list(options_dicts.keys())[0]
     options_dict = options_dicts.pop(name)
     for proposal_cls_name, option in options_dict.items():
         curr_fk_kwargs[name] = option
-        opt_name = option.sname if curr_fk_kwargs['cdssm'].model_sde.dimX == 1 else option.sname[2:]
+        opt_name = option.sname if not isinstance(model_sde, MvSDE) else option.sname[2:]
+        opt_name = opt_name[1:] if isinstance(model_sde, HypoellipticSDE) else opt_name
         curr_fk_name_ext = curr_fk_name + '_' + opt_name
         fk_models = _gen_fk_models_rec(fk_models, options_dicts, curr_fk_cls, curr_fk_name_ext, curr_fk_kwargs)
     options_dicts[name] = options_dict
@@ -659,6 +698,16 @@ def gen_fk_models(cdssm, data, smoothing=False, fk_names=None):
         return all_fk_models
     else:
         return {name: all_fk_models[name] for name in fk_names}
+
+def sde_type(model_sde):
+    if isinstance(model_sde, IntegratedSDE):
+        return 'integrated'
+    if isinstance(model_sde, TwiceIntegratedSDE):
+        return 'twice_integrated'
+    if isinstance(model_sde, MvEllipticSDE):
+        return 'mv'
+    else:
+        return 'univ'
 
 class _picklable_f:
 
