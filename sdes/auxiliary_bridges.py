@@ -81,7 +81,7 @@ Currently not implemented.
 Auxiliary Bridges: 4 Brownian Aux Bridges, 4 OU Aux Bridges
 -----------------
 
-IntegratedDriftBrownianAuxBridge: Auxiliary bridge that uses an integrated Brownian motion as the proxy.
+IntegratedDriftBrownianAuxBridge (1IDBr): Auxiliary bridge that uses an integrated Brownian motion as the proxy.
 IntegratedNoDriftBrownianAuxBridge: Auxiliary bridge that uses an integrated Brownian motion with 0 drift, as the proxy.
 TwiceIntegratedDriftBrownianAuxBridge: Auxiliary bridge that uses an integrated Brownian motion as the proxy.
 TwiceIntegratedNoDriftBrownianAuxBridge: Auxiliary bridge that uses an integrated Brownian motion with 0 drift, diagonal diffusion covariance as the proxy.  
@@ -97,7 +97,9 @@ End Point Proposals:
 
 MvNaiveEndPointProposal: E_t | E_{t-1} = e_{t-1} ~ N(0, (t-s)I_d)
 MvEulerMaruyamaEndPointProposal: E_t | E_{t-1} = e_{t-1} ~ N(e_{t-1} + b(0, e_{t-1)), (t-s)\sigma(0, e_{t-1}))
+MvIndepOUEndPointProposal: Transition of an OU process with diagonal elements in B matrix, diagnoal diffusion matrix.
 MvOUEndPointProposal: Transition of an OU process with diagonal elements in B matrix.
+
 
 IntegratedDriftBrownianEndPointProposal:
 IntegratedOUEndPointProposal
@@ -116,9 +118,6 @@ from sdes.sdes import TwiceIntegratedIndepBrownianMotion, TwiceIntegratedBrownia
 from sdes.path_integrals import log_girsanov, log_delyon_hu, log_drift_delyon_hu, log_van_der_meulen_schauer, mv_log_girsanov, mv_log_delyon_hu, mv_log_van_der_meulen_schauer
 from sdes.tools import log_abs_det, filter_step_var_cov, MeanAndCov
 from particles.distributions import ProbDist, Normal, VaryingCovNormal
-
-
-
 
 # -----------------LinearSDE Proposal Classes -----------------
 
@@ -216,6 +215,7 @@ class LinearSDEProposal(object):
         if isinstance(self, MvVanDerMeulenSchauerAuxBridge):
             if self._diag_cov:
                 linear_sde_params[par] = self._diffusion_to_diag(diffusion)
+        return linear_sde_params
       
     def check_matching_condition(self, linear_sde_params):
         par = self.diffusion_param_name
@@ -329,7 +329,8 @@ class OUProposal(LinearSDEProposal):
         return mv_linearising_functions
     
     def check_drift_param(self, linear_sde_params):
-        pass
+        # Do nothing
+        return linear_sde_params
     
 class EllipticBrownianProposal(EllipticLinearSDEProposal, BrownianProposal):
 
@@ -478,7 +479,7 @@ class DriftBasicBrownianProp(ForwardProposal, EllipticBrownianProposal):
     """
     $$dX_t = b(t_start, x_start)dt + dW_t$$
     """
-    sname='NDBBrP'
+    sname='DBBrP'
     any_cov = False
     drift = True
     
@@ -512,6 +513,7 @@ class LocalLinearBasicOUProp(ForwardProposal, EllipticOUProposal):
     B = db(t_start, x_start)
     C = 1.
     """
+    sname='BOUP'
     any_cov = False
 
 class LocalLinearOUProp(ForwardProposal, EllipticOUProposal):
@@ -916,12 +918,10 @@ class MvDriftBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal):
 #----------------- OU Multivariate Forward Proposals 3 Classes-----------------    
 
 class MvBasicOUProposal(MvEllipticForwardProposal, EllipticOUProposal):
-
     sname = 'MvBOUP'
     any_cov = False
     
 class MvIndepOUProposal(MvEllipticForwardProposal, EllipticOUProposal):
-
     sname = 'MvIOUP'
     any_cov = True
     full_cov = False
@@ -1167,10 +1167,10 @@ class TwiceIntegratedNoDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, Hy
 # ---------------Hypoelliptic OU Auxiliary Bridge Proposals: 2 Classes ----------------
 
 class IntegratedLLOUAuxBridge(MvVanDerMeulenSchauerAuxBridge, HypoellipticAuxiliaryBridge, IntegratedOUProposal):
-    sname = 'H1IDOU'
+    sname = 'H1IOU'
     
 class TwiceIntegratedLLOUAuxBridge(MvVanDerMeulenSchauerAuxBridge, HypoellipticAuxiliaryBridge, TwiceIntegratedOUProposal):
-    sname = 'H2INDOU'
+    sname = 'H2INOU'
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
@@ -1180,11 +1180,19 @@ class EndPointProposal(ProbDist):
     """
     Base class for end point proposals used in Backward Guided/Backward Reparameterised Feynman-Kac models.
     """
-    pass
+    def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
+        self.SDE = sde
+        self.x_start = x_start
+        self.t_start = t_start
+        self.t_end = t_end
+        self.y = y
+        self.LY = LY
+        self.sigmaY = sigmaY
+        self.build_linear_sde()
 
 class LinearEndPointProposal(Normal, EndPointProposal):
     def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
-        ForwardProposal.__init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY)
+        super().__init__(sde, x_start, t_start, t_end, y, LY, sigmaY)
         pred = MeanAndCov(self.pred_loc, self.pred_cov)
         opt_prop_loc, opt_prop_cov = filter_step_var_cov(LY, sigmaY ** 2, pred, y)
         Normal.__init__(self, loc=opt_prop_loc, cov=opt_prop_cov)
@@ -1207,7 +1215,7 @@ class MvLinearEndPointProposal(VaryingCovNormal, LinearEndPointProposal):
     """
 
     def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
-        MvForwardProposal.__init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY)
+        EndPointProposal.__init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY)
         pred = MeanAndCov(self.pred_loc, self.pred_cov)        
         opt_prop_loc, opt_prop_cov = filter_step_var_cov(LY, sigmaY @ sigmaY.T, pred, y) 
         VaryingCovNormal.__init__(self, loc=opt_prop_loc, cov=opt_prop_cov)
@@ -1227,54 +1235,68 @@ class MvLinearEndPointProposal(VaryingCovNormal, LinearEndPointProposal):
         """Method would be inherited from `Normal' unless overridden."""
         raise NotImplementedError
 
-
 # --------------- Elliptic End Point Proposals: 3 Classes ----------------
 
 class NaiveEndPointProposal(LinearEndPointProposal, EllipticBrownianProposal):
+    sname = 'NDBBrP'
     any_cov = False
     drift = False
     
 class EulerMaruyamaEndPointProposal(LinearEndPointProposal, EllipticBrownianProposal):   
+    sname = 'DBrP'
     any_cov = True
     drift = True
 
 class OUEndPointProposal(LinearEndPointProposal, EllipticOUProposal):
+    sname = 'OUP'
     any_cov = True
     
-# ---------------Multivariate Elliptic End Point Proposals: 3 Classes ----------------
+# ---------------Multivariate Elliptic End Point Proposals: 4 Classes ----------------
 
 class MvNaiveEndPointProposal(MvLinearEndPointProposal, EllipticBrownianProposal):
+    sname='MvNDBBrP'
     any_cov = False
     drift = False
     
 class MvEulerMaruyamaEndPointProposal(MvLinearEndPointProposal, EllipticBrownianProposal):   
+    sname='MvDBrP'
     any_cov = True
     full_cov = True
     drift = True
 
+class MvIndepOUEndPointProposal(MvLinearEndPointProposal, EllipticOUProposal):
+    sname='MvIOUP'
+    any_cov = True
+    full_cov = False
+    
 class MvOUEndPointProposal(MvLinearEndPointProposal, EllipticOUProposal):
+    sname='MvOUP'
     any_cov = True
     full_cov = True
     
 # ---------------Hypoelliptic Integrated End Point Proposals: 2 Classes ----------------
     
 class IntegratedDriftBrownianEndPointProposal(MvLinearEndPointProposal, IntegratedBrownianProposal):
+    sname='H1IDBrP'
     any_cov = True
     full_cov = True
     drift = True
 
 class IntegratedOUEndPointProposal(MvLinearEndPointProposal, IntegratedOUProposal):
+    sname='H1IOUP'
     any_cov = True
     full_cov = True
     
 # ---------------Hypoelliptic Twice Integrated End Point Proposals: 2 Classes ----------------
     
 class TwiceIntegratedDriftBrownianEndPointProposal(MvLinearEndPointProposal, TwiceIntegratedBrownianProposal):
+    sname='H2IDBrP'
     any_cov = True
     full_cov = True
     drift = True
 
 class TwiceIntegratedOUEndPointProposal(MvLinearEndPointProposal, TwiceIntegratedBrownianProposal):
+    sname='H2IOUP'
     any_cov = True
     full_cov = True
 
@@ -1293,7 +1315,7 @@ twice_integrated_auxiliary_bridges = [TwiceIntegratedDriftBrownianAuxBridge, Twi
 
 # End Point Proposals
 univ_end_point_proposals = [NaiveEndPointProposal, EulerMaruyamaEndPointProposal, OUEndPointProposal] 
-mv_end_point_proposals = [MvNaiveEndPointProposal, MvEulerMaruyamaEndPointProposal, MvOUEndPointProposal]
+mv_end_point_proposals = [MvNaiveEndPointProposal, MvEulerMaruyamaEndPointProposal, MvIndepOUEndPointProposal, MvOUEndPointProposal]
 integrated_end_point_proposals = [IntegratedDriftBrownianEndPointProposal, IntegratedOUEndPointProposal]
 twice_integrated_end_point_proposals = [TwiceIntegratedDriftBrownianEndPointProposal, TwiceIntegratedOUEndPointProposal]
  
