@@ -142,55 +142,7 @@ def mv_filter_step_var_cov(G, CovY, pred, yt):
     opt_prop_cov = nla.solve(jt_cov_y, jt_cov_yx) # (N, dimY, dimX)
     opt_prop_cov = jt_cov_x - np.einsum('ijk,ikl->ijl', jt_cov_xy, opt_prop_cov) # (N, dimX, dimY) (N, dimY, dimX) -> (N, dimX, dimX)
     return MeanAndCov(mean=opt_prop_loc, cov=opt_prop_cov)
-
-
-def optimal_proposal_dist(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: float, sigmaY: float):
-    """
-    Proposal for the end point using the exact distribution $E_t | E_{t-1}=e_{t-1}, Y_t = y_t$ from a Linear SDE.
-    x_s: float / (N, )
-    y_t: (1, )/ (1, dimY)
-    LY: float / (dimY, 1)
-    sigmaY: float / (dimY, dimY)
-    """    
-    a = self._a(s, t); b = self._b(s, t); v = self._v(s,t); sigmaY_sq = sigmaY ** 2
-    opt_prop_mean = (a*x_s + b) + (LY*v)/((LY*v) + sigmaY_sq) * (y_t - LY*(a*x_s+b))
-    opt_prop_var = v * (1 - (LY*v)/((LY*v) + sigmaY_sq))
-    return Normal(loc=opt_prop_mean, scale=np.sqrt(opt_prop_var))
     
-def filter_step_asarray(G, covY, pred, yt):
-    """Filtering step of Kalman filter: array version.
-
-    Parameters
-    ----------
-    G:  (dy, dx) numpy array
-        mean of Y_t | X_t is G * X_t
-    covX: (dx, dx) numpy array
-        covariance of Y_t | X_t
-    pred: MeanAndCov object
-        predictive distribution at time t
-
-    Returns
-    -------
-    pred: MeanAndCov object
-        filtering distribution at time t
-    logpyt: float
-        log density of Y_t | Y_{0:t-1}
-
-    Note
-    ----
-    This performs the filtering step for N distinctive predictive means:
-    filt.mean should be a (N, dx) or (N) array; pred.mean in the output
-    will have the same shape.
-
-    """
-    pm = pred.mean[:, np.newaxis] if pred.mean.ndim == 1 else pred.mean
-    new_pred = MeanAndCov(mean=pm, cov=pred.cov)
-    filt, logpyt = filter_step(G, covY, new_pred, yt)
-    if pred.mean.ndim == 1:
-        filt.mean.squeeze()
-    return filt, logpyt
-
-
 # @match_first_dim
 def mv_grad_log_linear_gaussian(x_s: np.ndarray, x_t: np.ndarray, A: np.ndarray, b: np.ndarray, S: np.ndarray) -> np.ndarray:
     """
