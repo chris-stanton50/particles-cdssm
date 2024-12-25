@@ -7,7 +7,7 @@ import numpy as np
 import scipy.linalg as sla
 from particles.distributions import Normal, VaryingCovNormal, MvNormal
 from sdes.numerical_schemes import EulerMaruyama, LinearExact, MvEulerMaruyama, MvLinearExact
-from sdes.tools import MeanAndCov, filter_step_var_cov, mv_filter_step_var_cov, vectorise_param, grad_log_linear_gaussian, grad_grad_log_linear_gaussian, mv_grad_log_linear_gaussian, mv_grad_grad_log_linear_gaussian 
+from sdes.tools import MeanAndCov, filter_step_var_cov, mv_filter_step_var_cov, vectorise_param, grad_log_linear_gaussian, grad_grad_log_linear_gaussian, mv_grad_log_linear_gaussian, mv_grad_grad_log_linear_gaussian
 from sdes.tools import get_methods, vec_grad_log_linear_gaussian
 
 
@@ -237,8 +237,33 @@ class ArctanDiffusion(SDE):
         return 0.
 
 class LogisticDiffusion(SDE):
-    pass
+    """
+    The logistic (Verhulst) growth population model, under stochastic shocks:
 
+    $dX_t = r X_t (1-X_t/K) dt + sX_t dW_t$
+    
+    r: Intrinsic growth rate
+    K: Carrying capacity
+    s: Noise intensity
+    
+    A reasonable initial condition is X_0 = K/10
+    """
+    
+    default_params = {'r': 0.5,
+                      'K': 100,
+                      's': 0.1}
+    
+    def b(self, t, x):
+        return self.r * x * (1 - x/self.K)
+
+    def db(self, t, x):
+        return self.r * (1 - 2*x/self.K)
+        
+    def sigma(self, t, x):
+        return self.s * x
+    
+    def dsigma(self, t, x):
+        return self.s
 
 #---------------------------------- Abstract base classes for Linear, Univariate SDEs ----------------------------------
 
@@ -761,50 +786,26 @@ class BrownianBridge(LinearSDE):
 class MvSDE(SDE):
     """
     Subclass this class to create multivariate SDEs.
+
     You will need to define:
 
     dimX: the dimension of the state X
     dimW: The dimension of the driving Brownian noise
 
-    b: The Drift function: Should map from (1, dimX) to (1, dimX).
-    sigma: The Covariance function: Should map from (1, dimX) to (dimX, dimW)
+    _diag_cov: Whether the covariance matrix of the diffusion is diagonal
+
+    b: The Drift function: Should map from (N, dimX) to (N, dimX).
+    sigma: The Diffusion function: Should map from (1, dimX) to (dimX, dimW)
     
-    Note that dimX <= dimW is a necessary condition to have an invertible covariance matrix.
+    Optionally:
+    
+    db: First derivative of the drift coefficient: (N, dimX) -> (N, dimX, dimX)
+    dsigma: First derivative of the diffusion coefficient: (N, dimX) -> (N, dimX, dimX, dimW)
     """
     
     # Simulation still possible for hypoelliptic diffusions.
     numerical_scheme_cls = MvEulerMaruyama
-    
-    def b(self, t: float, x: np.ndarray):
-        """  
-            Input  an array-like of shape (N, dimX)
-            Output an ndarray of shape (N, dimX)
-            Should broadcast an (N, dimX) input to an (N, dimX) output.
-        """
-        raise NotImplementedError(self._error_msg('b'))
-    
-    def sigma(self, t: float, x: np.ndarray):
-        """  
-            Input an array-like of shape (N, dimX)
-            Output an ndarray of shape (N, dimX, dimW)
-        """
-        raise NotImplementedError(self._error_msg('sigma'))
-
-    def db(self, t: float, x: np.ndarray):
-        """  
-            Input  an array-like of shape (N, dimX)
-            Output an ndarray of shape (N, dimX, dimX)
-        """
-        raise NotImplementedError(self._error_msg('b'))
-
-    def dsigma(self, t: float, x: np.ndarray):
-        """  
-            Input  an array-like of shape (N, dimX)
-            Output an ndarray of shape (N, dimX, dimX, dimX)
-            Should broadcast an (N, dimX) input to an (N, dimX) output.
-        """
-        raise NotImplementedError(self._error_msg('b'))
-    
+        
     def Cov(self, t: float, x: np.ndarray):
         """  
             Input an array-like of shape (N, dimX)
@@ -912,9 +913,85 @@ class TwiceIntegratedSDE(HypoellipticSDE):
 
 #--------------------------------------------- Examples of Multivariate SDEs -------------------------------------------
 
+class FitzHughNagumo(MvEllipticSDE):
+    """
+    Stochastic FitzhughNagumo model with additive noise in both components: 
+    
+    Note: An alternative variant of this model is available through transformation, that is an integrated diffusion.
+    """
+    dimX = 2
+    default_params = {'rho': np.array([1.4, 1.5, 10.]),
+                      'phi': np.array([0.25, 0.2])
+                        }
+    _diag_cov = True
 
-#---------------------------------- Abstract Base Classes for Multivariate Linear SDEs ----------------------------------
-# Includes both the Elliptic and Hypoelliptic Cases
+    def b(self, t, x):
+        x_1 = self.rho[0] * ((-x[:, 0] ** 3) + x[:, 0] - x[:, 1] + 0.5) # (N, )
+        x_2 = self.rho[1] * x[:, 0] - x[:, 1] + self.rho[2] # (N, )
+        return np.stack([x_1, x_2], axis=1)
+
+    def sigma(self, t, x):
+        N = x.shape[0]
+        return np.stack([np.diag(self.phi)]*N, axis=0)
+    
+    def db(self, t, x):
+        N = x.shape[0]
+        db_1_dx_1 = self.rho[0] * (3 * (x[:, 0] ** 2) + 1) # (N, )
+        db_1_dx_2 = np.array([-self.rho[1]]*N)
+        db_2_dx_1 = np.array([self.rho[2]]*N)
+        db_2_dx_2 = np.array([-1.]*N)
+        db = np.stack([db_1_dx_1, db_1_dx_2, db_2_dx_1, db_2_dx_2], axis=1).reshape(N, 2, 2)
+        return db
+
+    # def db_diag(self, t, x):
+    #     N = x.shape[0]
+    #     db_1_dx_1 = self.rho[0] * (3 * (x[:, 0] ** 2) + 1) # (N, )
+    #     db_2_dx_2 = np.array([-1.]*N) #(N, )
+    #     return np.stack([db_1_dx_1, db_2_dx_2], axis=1) # (N, 2)
+        
+    def dsigma(self, t, x):
+        N = x.shape[0]
+        return np.zeros((N, self.dimX, self.dimX, self.dimX))
+
+class LotkaVolterra(MvEllipticSDE):
+    """
+    The stochastic Lotka-Volterra model for predator-prey dynamics.
+    
+    dX_{1, t} = \alpha X_{1, t} - \beta X_{1, t}X_{2, t}dt + s_1 dW_{1, t}
+    dX_{2, t} = \delta X_{1, t}X_{2, t} -\gamma γX_{2, t}dt + s_2 dW_{2, t}
+
+    X_1: Prey population,
+    X_2: Predator population
+    
+    \alpha : prey growth rate,
+    \beta: predation rate,
+    \delta: predator reproduction rate per prey consumed,
+    \gamma: predator mortality rate,
+    s_1, s_2 :noise intensities for prey and predator.
+    
+    Note: Good initial values for the process are:
+    X_1 = 50, X_2 = 10
+    """
+    dimX = 2
+    default_params = {'alpha': 0.1,
+                      'beta': 0.02,
+                      'delta': 0.01,
+                      'gamma': 0.5,
+                      's': np.array([0.1, 0.1])}
+    _diag_cov = True
+    
+    def b(self, t, x):
+        x_1 = self.alpha * x[:, 0] - self.beta * x[:, 0] * x[:, 1] # (N, )
+        x_2 = self.delta * x[:, 0]*x[:, 1] - self.gamma * x[:, 1] # (N, )
+        return np.stack([x_1, x_2], axis=1)
+
+    def sigma(self, t, x):
+        N = x.shape[0]
+        diag_sigma = x*self.s # (N, 2)
+        return np.stack([np.diag(diag_sigma[i]) for i in range(N)], axis=0)
+    
+
+#---------------------------------- Abstract Base Classes for Multivariate Elliptic Linear SDEs ----------------------------------
 
 class MvLinearSDE(MvSDE, LinearSDE):
     """
@@ -1182,6 +1259,9 @@ class MvLinearSDE(MvSDE, LinearSDE):
             raise ValueError('Input x must match number of particles in the first dimension.')
         if x.shape[1] != self.dimX:
             raise ValueError('Input x must have the same dimension as the SDE in the second dimension.')
+
+
+#---------------------------------- Example Classes for Multivariate Elliptic Linear SDEs ----------------------------------
 
 class MvIndepBrownianMotion(MvLinearSDE, MvEllipticSDE):
     """
@@ -1461,129 +1541,7 @@ class MvFullOrnsteinUhlenbeck(MvOrnsteinUhlenbeck, MvEllipticSDE):
         """
         return NotImplementedError(self._error_msg('_v'))
 
-class TimeSwitchingSDE(SDE):
-    """
-    General class for a diffusion process that switches between two possible regimes.
-    
-    To do: you could come back to this and change the API a bit, so that 
-    the init method takes in the parameters of the two sdes and the switching time, 
-    as opposed to the 2 SDEs themselves.
-    
-    Parameter to supply to the __init__ method are:
-    - The parameters from sde1, appended with _1
-    - The parameters from sde2, appended with _2
-    - The switching time t_switch
-    
-    To constuct your own time-switching SDE, subclass and 
-    define the two SDEs that you want to switch between as the class attributes
-    
-    - 'sde1_cls' 
-    - 'sde2_cls'
-    'simulate': None, 
-    """
-    t_switching_methods = {'simulate': None, 'b': 0, 'sigma': 0, 'db': 0, 'dsigma': 0, 'A': 0, 'B': 0, 'C': 0, '_a': 1, '_b': 1, '_v': 1}
-    sde1_cls = None
-    sde2_cls = None
-
-    @property
-    def params(self):
-        sde1_params = {name + '_1': param for name, param in self.sde1.params.items()}
-        sde2_params = {name + '_2': param for name, param in self.sde2.params.items()}
-        params = {**sde1_params, **sde2_params, **{'t_switch': self.t_switch}}
-        return params
-    
-    def __init__(self, **kwargs):
-        sde1_kwargs = {k[:-2]: v for k, v in kwargs.items() if k.endswith('_1')}
-        sde2_kwargs = {k[:-2]: v for k, v in kwargs.items() if k.endswith('_2')}
-        if 'dimX' in kwargs.keys():
-            sde1_kwargs.update({'dimX': kwargs['dimX']})
-            sde2_kwargs.update({'dimX': kwargs['dimX']})
-            del(kwargs['dimX'])
-        self.sde1 = self.sde1_cls(**sde1_kwargs)
-        self.sde2 = self.sde2_cls(**sde2_kwargs)
-        self.N = 1
-        SDE.__init__(self, **kwargs)
-        self.base_sde_cls = self._gen_base_sde_cls()
-        
-        # Check that sde1 and sde2 have compatible dimensions
-        assert self.sde1.dimX == self.sde2.dimX, 'Attribute dimX must be the same for both SDEs'
-        assert self.sde1.dimW == self.sde2.dimW, 'Attribute dimW must be the same for both SDEs'
-
-        sde1_methods = set(get_methods(self.sde1))
-        sde2_methods = set(get_methods(self.sde2))
-        methods = sde1_methods.intersection(sde2_methods)
-        t_switching_methods = set(self.t_switching_methods.keys()).intersection(methods)
-        base_methods = methods - t_switching_methods
-        t_switching_methods = {method: self.t_switching_methods[method] for method in t_switching_methods}
-        # Dynamically add methods t_switching methods from sde1 and sde2
-        self._add_t_switching_methods(t_switching_methods)
-
-        # Dynamically add methods from base_sde_cls
-        self._add_base_methods(base_methods)
-
-    @property
-    def dimX(self):
-        return self.sde1.dimX
-    
-    @property
-    def dimW(self):
-        return self.sde1.dimW
-
-    @property
-    def _diag_cov(self):
-        return True if self.sde1._diag_cov and self.sde2._diag_cov else False
-    
-    @property
-    def default_params(self):
-        sde1_params = {name + '_1': param for name, param in self.sde1.default_params.items()}
-        sde2_params = {name + '_2': param for name, param in self.sde2.default_params.items()}
-        params = {**sde1_params, **sde2_params, **{'t_switch': 10}}
-        return params
-
-    def _add_base_methods(self, method_names):
-        # Dynamically bind methods from base_sde_cls
-        for method_name in method_names:
-            if hasattr(self.base_sde_cls, method_name):
-                method = getattr(self.base_sde_cls, method_name)
-                # Bind the method to the instance
-                setattr(self, method_name, method.__get__(self))
-
-    def _gen_base_sde_cls(self):
-        sde1_mro = self.sde1.__class__.mro()
-        sde2_mro = self.sde2.__class__.mro()
-        for cls in sde1_mro:
-            if cls in sde2_mro:
-                return cls
-            
-    def _add_t_switching_methods(self, method_dict):
-        for method_name, t_idx in method_dict.items():
-            m1 = getattr(self.sde1, method_name)
-            m2 = getattr(self.sde2, method_name)
-            method = self._t_switching_method(m1, m2, t_idx)
-            setattr(self, method_name, method.__get__(self))
-
-    def _t_switching_method(self, m1, m2, t_idx):
-        def method(_self, *args, **kwargs):
-            t = args[t_idx] if t_idx is not None else kwargs['t_end']
-            cond = t < _self.t_switch if t_idx == 0 else t <= _self.t_switch
-            return m1(*args, **kwargs) if cond else m2(*args, **kwargs)
-            # else:
-            #     pass   
-            #     # Placeholder to deal with vectorised time in 1D case.             
-            #     # cond = np.where(t - tol < _self.t_switch, 1., 0.)
-            #     # return cond*m1(*args, **kwargs) 
-        return method
-        
-class TS_MvOrnsteinUhlenbeck(TimeSwitchingSDE, MvLinearSDE, MvEllipticSDE):
-    sde1_cls = MvOrnsteinUhlenbeck
-    sde2_cls = MvOrnsteinUhlenbeck
-
-class TS_OrnsteinUhlenbeck(TimeSwitchingSDE, LinearSDE):
-    sde1_cls = OrnsteinUhlenbeck
-    sde2_cls = OrnsteinUhlenbeck
-    
-# ---------------------------------- Hypoelliptic SDEs ---------------------------------- #
-
+#---------------------------------- Abstract Base Classes for Multivariate Hypoelliptic Linear SDEs ----------------------------------
 
 class HypoellipticLinearSDE(MvLinearSDE, HypoellipticSDE):
 
@@ -1966,6 +1924,9 @@ class HypoellipticOrnsteinUhlenbeck(HypoellipticIndepOrnsteinUhlenbeck):
         int_exp_rho_q = np.stack([A_dot_B_T(int_exp_rho[n], qs[l, n, :]) for n in range(self.N)]) # (N, dw, dw)
         return int_exp_rho_q
 
+
+#---------------------------------- Example Classes for Multivariate Hypoelliptic Linear SDEs ------------------------
+
 class IntegratedIndepBrownianMotion(HypoellipticIndepBrownianMotion, IntegratedSDE):
     pass
 
@@ -1989,3 +1950,128 @@ class TwiceIntegratedIndepOrnsteinUhlenbeck(HypoellipticIndepOrnsteinUhlenbeck, 
 
 class TwiceIntegratedOrnsteinUhlenbeck(HypoellipticOrnsteinUhlenbeck, TwiceIntegratedSDE):
     pass
+
+#---------------------------------- Abstract Base class for time-switching SDEs ----------------------------------
+
+class TimeSwitchingSDE(SDE):
+    """
+    General class for a diffusion process that switches between two possible regimes.
+    
+    To do: you could come back to this and change the API a bit, so that 
+    the init method takes in the parameters of the two sdes and the switching time, 
+    as opposed to the 2 SDEs themselves.
+    
+    Parameter to supply to the __init__ method are:
+    - The parameters from sde1, appended with _1
+    - The parameters from sde2, appended with _2
+    - The switching time t_switch
+    
+    To constuct your own time-switching SDE, subclass and 
+    define the two SDEs that you want to switch between as the class attributes
+    
+    - 'sde1_cls' 
+    - 'sde2_cls'
+    'simulate': None, 
+    """
+    t_switching_methods = {'simulate': None, 'b': 0, 'sigma': 0, 'db': 0, 'dsigma': 0, 'A': 0, 'B': 0, 'C': 0, '_a': 1, '_b': 1, '_v': 1}
+    sde1_cls = None
+    sde2_cls = None
+
+    @property
+    def params(self):
+        sde1_params = {name + '_1': param for name, param in self.sde1.params.items()}
+        sde2_params = {name + '_2': param for name, param in self.sde2.params.items()}
+        params = {**sde1_params, **sde2_params, **{'t_switch': self.t_switch}}
+        return params
+    
+    def __init__(self, **kwargs):
+        sde1_kwargs = {k[:-2]: v for k, v in kwargs.items() if k.endswith('_1')}
+        sde2_kwargs = {k[:-2]: v for k, v in kwargs.items() if k.endswith('_2')}
+        if 'dimX' in kwargs.keys():
+            sde1_kwargs.update({'dimX': kwargs['dimX']})
+            sde2_kwargs.update({'dimX': kwargs['dimX']})
+            del(kwargs['dimX'])
+        self.sde1 = self.sde1_cls(**sde1_kwargs)
+        self.sde2 = self.sde2_cls(**sde2_kwargs)
+        self.N = 1
+        SDE.__init__(self, **kwargs)
+        self.base_sde_cls = self._gen_base_sde_cls()
+        
+        # Check that sde1 and sde2 have compatible dimensions
+        assert self.sde1.dimX == self.sde2.dimX, 'Attribute dimX must be the same for both SDEs'
+        assert self.sde1.dimW == self.sde2.dimW, 'Attribute dimW must be the same for both SDEs'
+
+        sde1_methods = set(get_methods(self.sde1))
+        sde2_methods = set(get_methods(self.sde2))
+        methods = sde1_methods.intersection(sde2_methods)
+        t_switching_methods = set(self.t_switching_methods.keys()).intersection(methods)
+        base_methods = methods - t_switching_methods
+        t_switching_methods = {method: self.t_switching_methods[method] for method in t_switching_methods}
+        # Dynamically add methods t_switching methods from sde1 and sde2
+        self._add_t_switching_methods(t_switching_methods)
+
+        # Dynamically add methods from base_sde_cls
+        self._add_base_methods(base_methods)
+
+    @property
+    def dimX(self):
+        return self.sde1.dimX
+    
+    @property
+    def dimW(self):
+        return self.sde1.dimW
+
+    @property
+    def _diag_cov(self):
+        return True if self.sde1._diag_cov and self.sde2._diag_cov else False
+    
+    @property
+    def default_params(self):
+        sde1_params = {name + '_1': param for name, param in self.sde1.default_params.items()}
+        sde2_params = {name + '_2': param for name, param in self.sde2.default_params.items()}
+        params = {**sde1_params, **sde2_params, **{'t_switch': 10}}
+        return params
+
+    def _add_base_methods(self, method_names):
+        # Dynamically bind methods from base_sde_cls
+        for method_name in method_names:
+            if hasattr(self.base_sde_cls, method_name):
+                method = getattr(self.base_sde_cls, method_name)
+                # Bind the method to the instance
+                setattr(self, method_name, method.__get__(self))
+
+    def _gen_base_sde_cls(self):
+        sde1_mro = self.sde1.__class__.mro()
+        sde2_mro = self.sde2.__class__.mro()
+        for cls in sde1_mro:
+            if cls in sde2_mro:
+                return cls
+            
+    def _add_t_switching_methods(self, method_dict):
+        for method_name, t_idx in method_dict.items():
+            m1 = getattr(self.sde1, method_name)
+            m2 = getattr(self.sde2, method_name)
+            method = self._t_switching_method(m1, m2, t_idx)
+            setattr(self, method_name, method.__get__(self))
+
+    def _t_switching_method(self, m1, m2, t_idx):
+        def method(_self, *args, **kwargs):
+            t = args[t_idx] if t_idx is not None else kwargs['t_end']
+            cond = t < _self.t_switch if t_idx == 0 else t <= _self.t_switch
+            return m1(*args, **kwargs) if cond else m2(*args, **kwargs)
+            # else:
+            #     pass   
+            #     # Placeholder to deal with vectorised time in 1D case.             
+            #     # cond = np.where(t - tol < _self.t_switch, 1., 0.)
+            #     # return cond*m1(*args, **kwargs) 
+        return method
+
+#---------------------------------- Example classes for time-switching SDEs ----------------------------------
+        
+class TS_MvOrnsteinUhlenbeck(TimeSwitchingSDE, MvLinearSDE, MvEllipticSDE):
+    sde1_cls = MvOrnsteinUhlenbeck
+    sde2_cls = MvOrnsteinUhlenbeck
+
+class TS_OrnsteinUhlenbeck(TimeSwitchingSDE, LinearSDE):
+    sde1_cls = OrnsteinUhlenbeck
+    sde2_cls = OrnsteinUhlenbeck
