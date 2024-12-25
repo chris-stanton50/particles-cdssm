@@ -1,76 +1,115 @@
 """
 Auxiliary Bridges module:
 --------------------------
-Within this module, we implement abstractions of the different choices 
-of auxiliary bridges that can be used as valid proposals for the true diffusion bridge
+Within this module, we implement abstractions of the folllowing objects:
 
-to construct an invertible mapping from the bridge 
-of an SDE conditional on the starting point and the end point, to a sample path
-which has distribution that is absolutely integrable with respect to the parameter
-free Weiner measure.
+- Forward Proposals:                        Proposal SDEs for use in Forward Guided/Reparameterised Feynman-Kac models. Likelihood ratio between proposal and signal is given by the Girsanov formula.
+(Forward Guided/Forward Reparameterised)    Evaulation of likelihood ratio requires an invertible covariance matrix, thus this contruction is only possible for elliptic model SDEs,
 
-The original bridge construction given in Yonekura and Beskos (2022) is the auxiliary
-bridge process of Delyon and Hu (2006). Additional choices of auxiliary bridge process
-proposed in Schauer, van der Meulen and Van Zanten (2017) along with proofs of their
-equivalence to the true diffusion bridge. 
+- Auxiliary Bridges:                        SDEs that are absolutely contiuous with respect to the true diffusion bridge of the signal process. The constuction of diffusion bridge proposals
+(Backward Guided/Backward Reparameterised)  has been an active area of research over the past 20 years. We implement here the Delyon-Hu bridge (2006) and the Van Der Meulen-Schauer bridges (2017)
+                                            that are based on selecting an appropriate choice of LinearSDE that is close to the signal process.
 
+- End Point Proposals:                      Proposals that are used to propose the end points of the signal process conditional on the obervation. Used in the first step of the simulation of a
+(Backward Guided/Backward Reparameterised)  backward proposal, within a backward guided or backward reparameterised Feynman-Kac model. Subclasses of the particles.distributions.ProbDist class.
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 Univariate Case
------------------
+---------------------------------------------------
+---------------------------------------------------
+
 
 Forward Proposals: 4 Brownian Proposals, 2 OU Proposals
 -----------------
 
-NoDriftBasicBrownianProp: No Drift, diffusion 1.
-NoDriftBrownianProp: No drift, diffusion \sigma(t_start, x_start)
-DriftBasicBrownianProp: Drift b(t_start, x_start), diffusion 1.
-DriftBrownianProp: Drift b(t_start, x_start), diffusion \sigma(t_start, x_start)
+(Abstract Base class: ForwardProposalBase -> ForwardProposal)
 
-LocalLinearBasicOUProp: Drift local linearising b at t_start, x_start, diffusion coefficient as 1.
-LocalLinearOUProp: Drift local linearising b at t_start, x_start, diffusion coefficient as \sigma(t_start, x_start)
+- NoDriftBasicBrownianProp (NDBBrP): No Drift, diffusion 1.
+- NoDriftBrownianProp (NDBrP): No drift, diffusion \sigma(t_start, x_start)
+- DriftBasicBrownianProp (DBBrP): Drift b(t_start, x_start), diffusion 1.
+- DriftBrownianProp (DBrP): Drift b(t_start, x_start), diffusion \sigma(t_start, x_start)
 
-Auxiliary Bridges: 2 Delyon Hu Bridges, 2 Brownian Aux Bridges, 1 OU Aux Bridge
------------------
-DelyonHuAuxBridge: The auxiliary bridge as proposed by Delyon and Hu (2006)
-DriftDelyonHuAuxBridge: The Delyon-Hu bridge, with the drift added on. This will work fine for constant diffusion coefficients. (Not implemented yet)
+- LocalLinearBasicOUProp (BOUP): Drift local linearising b at t_start, x_start, diffusion coefficient as 1.
+- LocalLinearOUProp (OUP): Drift local linearising b at t_start, x_start, diffusion coefficient as \sigma(t_start, x_start)
 
-(subclasses of VanDerMeulenSchauerAuxBridge)
-
-NoDriftBrownianAuxBridge: Drift: 0., diffusion \sigma(t_end, x_end) (matching condition)
-DriftBrownianAuxBridge: Drift: b(t_end, x_end), diffusion \sigma(t_end, x_end) (matching condition)
-
-LocalLinearOUAuxBridge: Drift: Local linearising b at t_end, x_end, diffusion \sigma(t_end, x_end) (matching condition)
-
-Multivariate Case
+Auxiliary Bridges: 2 Delyon Hu Bridges, 2 Brownian Aux Bridges, 1 OU Aux Bridge 
 -----------------
 
-Forward Proposals: 6 Brownian Proposals, 2 OU Proposals
+(Abstract Base class: AuxiliaryBridgeBase -> AuxiliaryBridge)
+
+- DelyonHuAuxBridge (DH): The auxiliary bridge as proposed by Delyon and Hu (2006)
+- DriftDelyonHuAuxBridge (DDH): The Delyon-Hu bridge, with the drift added on. This will work fine for constant diffusion coefficients. (Not implemented yet)
+
+(Abstract Base Class: AuxiliaryBridgeBase -> AuxiliaryBridge -> VanDerMeulenSchauerAuxBridge)
+
+- NoDriftBrownianAuxBridge (NDBr): Drift: 0., diffusion \sigma(t_end, x_end) (matching condition)
+- DriftBrownianAuxBridge (DBr): Drift: b(t_end, x_end), diffusion \sigma(t_end, x_end) (matching condition)
+
+- LocalLinearOUAuxBridge (OU): Drift: Local linearising b at t_end, x_end, diffusion \sigma(t_end, x_end) (matching condition)
+
+End Point Proposals: 3 LinearSDE End Point Proposals (Can add more if desired)
+--------------------
+
+(Abstract Base Class: EndPointProposal -> LinearEndPointProposalBase -> LinearEndPointProposal)
+
+- NaiveEndPointProposal (NDBBrP): E_t | E_{t-1} = e_{t-1} ~ N(0, (t-s))
+- EulerMaruyamaEndPointProposal (DBrP): E_t | E_{t-1} = e_{t-1} ~ N(e_{t-1} + b(0, e_{t-1)), (t-s)\sigma(0, e_{t-1}))
+- OUEndPointProposal (OUP): Transition of an OU process with diffusion coefficient \sigma(0, e_{t-1})
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Multivariate Elliptic Case
+---------------------------
+
+Forward Proposals: 6 Brownian Proposals, 3 OU Proposals
 -----------------
 
-MvNoDriftBasicBrownianProp: Drift: 0.*1_d, diffusion I_d 
-MvDriftBasicBrownianProp: Drift: b(t_start, x_start), diffusion I_d
-MvNoDriftIndepBrownianProp: Drift: b(t_start, x_start), diffusion diag(\sigma(t_start, x_start))
-MvNoDriftBrownianProp: Drift: b(t_start, x_start), diffusion \sigma(t_start, x_start)
-MvDriftIndepBrownianProp: Drift: b(t_start, x_start), diffusion diag(\sigma(t_start, x_start))
-MvDriftBrownianProp: Drift: b(t_start, x_start), diffusion \sigma(t_start, x_start)
+(Abstract Base class: ForwardProposalBase -> MvForwardProposal -> MvEllipticForwardProposal)
 
-MvOUProposal: Drift: Local linearising b at t_start, x_start, taking only diagonal components of B(t) matrix, diffusion \sigma(t_start, x_start)
-MvIndepOUProposal: Local linearising b at t_start, x_start, taking only diagonal components of B(t) matrix, diffusion \diag(\sigma(t_start, x_start))
+- MvNoDriftBasicBrownianProp (MvNDBBrP): Drift: 0.*1_d, diffusion I_d 
+- MvDriftBasicBrownianProp (MvDBBrP): Drift: b(t_start, x_start), diffusion I_d
+- MvNoDriftIndepBrownianProp (MvNDIBrP): Drift: b(t_start, x_start), diffusion diag(\sigma(t_start, x_start))
+- MvNoDriftBrownianProp (MvNDBrP): Drift: b(t_start, x_start), diffusion \sigma(t_start, x_start)
+- MvDriftIndepBrownianProp (MvDIBrP): Drift: b(t_start, x_start), diffusion diag(\sigma(t_start, x_start))
+- MvDriftBrownianProp (MvDBrP): Drift: b(t_start, x_start), diffusion \sigma(t_start, x_start)
+
+- MvBasicOUProposal (MvBOUP): Local linearising b at t_start, x_start, diffusion I_d
+- MvIndepOUProposal (MvIOUP): Local linearising b at t_start, x_start, taking only diagonal components of B(t) matrix, diffusion \diag(\sigma(t_start, x_start))
+- MvOUProposal (MvOUP): Drift: Local linearising b at t_start, x_start, taking only diagonal components of B(t) matrix, diffusion \sigma(t_start, x_start)
 
 Auxiliary Bridges: 2 Delyon Hu bridges, 2 Brownian Aux Bridges, 1 OU Aux Bridge
 -----------------
 
-MvDelyonHuAuxBridge: The auxiliary bridge as proposed by Delyon and Hu (2006)
-MvDriftDelyonHuAuxBridge: The Delyon-Hu bridge, with the drift added on. This will work fine for constant diffusion coefficients. (Not implemented yet)
+(Abstract Base Class: AuxiliaryBridgeBase -> MvAuxiliaryBridge -> MvEllipticAuxiliaryBridge)
 
-(subclasses of MvVanDerMeulenSchauerAuxBridge)
-MvNoDriftBrownianAuxBridge: Auxiliary bridge proposal that takes the Brownian motion with 0 drift as the linear SDE
-MvDriftBrownianAuxBridge: Auxiliary bridge that takes the Brownian motion as the linear SDE
+- MvDelyonHuAuxBridge (MvDH): The auxiliary bridge as proposed by Delyon and Hu (2006)
+- MvDriftDelyonHuAuxBridge (MvDDH): The Delyon-Hu bridge, with the drift added on. This will work fine for constant diffusion coefficients. (Not implemented yet)
 
-MvOUAuxBridge: Auxiliary bridge that takes the OU process as the linear SDE.
+(Abstract Base Class: AuxiliaryBridgeBase -> MvAuxiliaryBridge -> MvVanDerMeulenSchauerAuxBridge -> MvEllipticVanDerMeulenSchauerAuxBridge)
+                           AuxiliaryBridgeBase -> MvAuxiliaryBridge -> MvEllipticAuxiliaryBridge -> MvEllipticVanDerMeulenSchauerAuxBridge
 
-Hypoelliptic Case:
------------------
+- MvNoDriftBrownianAuxBridge (MvNDBr): Auxiliary bridge proposal that takes the Brownian motion with 0 drift as the linear SDE
+- MvDriftBrownianAuxBridge (MvDBr): Auxiliary bridge that takes the Brownian motion as the linear SDE
+- MvOUAuxBridge (MvOU): Auxiliary bridge that takes the OU process as the linear SDE.
+
+
+End Point Proposals: 4 LinearSDE End Point Proposals (Can add more if desired)
+--------------------
+
+(Abstract Base Class: EndPointProposal -> LinearEndPointProposalBase -> MvLinearEndPointProposal -> MvEllipticLinearEndPointProposal)
+
+- MvNaiveEndPointProposal (MvNDBBrP): E_t | E_{t-1} = e_{t-1} ~ N(0, (t-s)I_d)
+- MvEulerMaruyamaEndPointProposal (MvDBrP): E_t | E_{t-1} = e_{t-1} ~ N(e_{t-1} + b(0, e_{t-1)), (t-s)\sigma(0, e_{t-1}))
+- MvIndepOUEndPointProposal (MvIOUP): Transition of an OU process with diagonal elements in B matrix, diagnoal diffusion matrix.
+- MvOUEndPointProposal (MvOUP): Transition of an OU process with diagonal elements in B matrix.
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Multivariate Hypoelliptic Case (Includes both integrated and twice integrated SDEs)
+-----------------------------------------------------------------------------------
 
 Forward Proposals: Forward Proposals are possible for the hypoelliptic case, but only for filtering and smoothing algorithms that do not change ancestors.
 -----------------
@@ -78,46 +117,60 @@ Forward Proposals: Forward Proposals are possible for the hypoelliptic case, but
 Currently not implemented.
 
 
-Auxiliary Bridges: 4 Brownian Aux Bridges, 4 OU Aux Bridges
+Auxiliary Bridges: - 3 Integrated SDEs, 3 Twice Integrated SDEs: All based on the Van Der Meulen-Schauer bridge
 -----------------
 
-IntegratedDriftBrownianAuxBridge (1IDBr): Auxiliary bridge that uses an integrated Brownian motion as the proxy.
-IntegratedNoDriftBrownianAuxBridge: Auxiliary bridge that uses an integrated Brownian motion with 0 drift, as the proxy.
-TwiceIntegratedDriftBrownianAuxBridge: Auxiliary bridge that uses an integrated Brownian motion as the proxy.
-TwiceIntegratedNoDriftBrownianAuxBridge: Auxiliary bridge that uses an integrated Brownian motion with 0 drift, diagonal diffusion covariance as the proxy.  
-
-IntegratedDriftLLOUAuxBridge: Auxiliary Bridge that uses an integrated O-U process as the proxy.
-IntegratedNoDriftLLOUAuxBridge: Auxiliary Bridge that uses an integrated O-U process as the proxy.
-TwiceIntegratedDriftLLOUAuxBridge: Auxiliary Bridge that uses a twice integrated O-U process as the proxy.
-TwiceIntegratedNoDriftLLOUAuxBridge: Auxiliary Bridge that uses a twice integrated O-U process as the proxy.
+(Abstract Base Class: AuxiliaryBridgeBase -> MvAuxiliaryBridge -> HypoellipticAuxiliaryBridge -> IntegratedAuxiliaryBridge -> IntegratedVanDerMeulenSchauerAuxBridge)
+                                          AuxiliaryBridgeBase -> MvAuxiliaryBridge -> MvVanDerMeulenSchauerAuxiliaryBridge -> IntegratedVanDerMeulenSchauerAuxBridge
 
 
-End Point Proposals:
+- IntegratedDriftBrownianAuxBridge (H1IDBr): Auxiliary bridge that uses an integrated Brownian motion as the proxy.
+- IntegratedNoDriftBrownianAuxBridge (H1INDBr): Auxiliary bridge that uses an integrated Brownian motion with 0 drift, as the proxy.
+- IntegratedLLOUAuxBridge (H1IOU): Auxiliary Bridge that uses an integrated O-U process as the proxy.
+
+(Abstract Base Class: MvAuxiliaryBridge -> HypoellipticAuxiliaryBridge -> TwiceIntegratedAuxiliaryBridge -> TwiceIntegratedVanDerMeulenSchauerAuxBridge)
+                                               MvAuxiliaryBridge -> MvVanDerMeulenSchauerAuxiliaryBridge -> TwiceIntegratedVanDerMeulenSchauerAuxBridge
+
+
+- TwiceIntegratedDriftBrownianAuxBridge (H2IDBr): Auxiliary bridge that uses an integrated Brownian motion as the proxy.
+- TwiceIntegratedNoDriftBrownianAuxBridge (H2INDBr): Auxiliary bridge that uses an integrated Brownian motion with 0 drift, diagonal diffusion covariance as the proxy.
+- TwiceIntegratedLLOUAuxBridge (H2IOU): Auxiliary Bridge that uses a twice integrated O-U process as the proxy.
+
+
+End Point Proposals: 4 for integrated SDEs, 4 for twice integrated SDEs
 -----------------
 
-MvNaiveEndPointProposal: E_t | E_{t-1} = e_{t-1} ~ N(0, (t-s)I_d)
-MvEulerMaruyamaEndPointProposal: E_t | E_{t-1} = e_{t-1} ~ N(e_{t-1} + b(0, e_{t-1)), (t-s)\sigma(0, e_{t-1}))
-MvIndepOUEndPointProposal: Transition of an OU process with diagonal elements in B matrix, diagnoal diffusion matrix.
-MvOUEndPointProposal: Transition of an OU process with diagonal elements in B matrix.
+(Abstract Base Class: EndPointProposal -> LinearEndPointProposalBase -> MvLinearEndPointProposal -> HypoellipticLinearEndPointProposal -> IntegratedLinearEndPointProposal)
+
+- IntegratedNaiveEndPointProposal (H1INDBBrP): E_t | E_{t-1} = e_{t-1} ~ N(0, (t-s)I_d)
+- IntegratedDriftBrownianEndPointProposal (H1IDBrP): E_t | E_{t-1} = e_{t-1} ~ N(e_{t-1} + b(0, e_{t-1}), (t-s)\sigma(0, e_{t-1}))
+- IntegratedIndepOUEndPointProposal (H1IOUP): Transition of an integrated O-U process with diagonal elements in B matrix, diagnoal diffusion matrix.
+- IntegratedOUEndPointProposal (H1OUP): Transition of an integrated O-U process with diagonal elements in B matrix.
+
+(Abstract Base Class: EndPointProposal -> LinearEndPointProposalBase -> MvLinearEndPointProposal -> HypoellipticLinearEndPointProposal -> TwiceIntegratedLinearEndPointProposal)
+
+- TwiceIntegratedNaiveEndPointProposal (H2INDBBrP): E_t | E_{t-1} = e_{t-1} ~ N(0, (t-s)I_d)    
+- TwiceIntegratedDriftBrownianEndPointProposal (H2IDBrP): E_t | E_{t-1} = e_{t-1} ~ N(e_{t-1} + b(0, e_{t-1}), (t-s)\sigma(0, e_{t-1}))
+- TwiceIntegratedIndepOUEndPointProposal (H2IOUP): Transition of a twice integrated O-U process with diagonal elements in B matrix, diagnoal diffusion matrix.
+- TwiceIntegratedOUEndPointProposal (H2OUP): Transition of a twice integrated O-U process with diagonal elements in B matrix.
 
 
-IntegratedDriftBrownianEndPointProposal:
-IntegratedOUEndPointProposal
-    
-IntegratedDriftBrownianEndPointProposal:
-IntegratedOUEndPointProposal:
 
+Also implemmented at the start of the file, are utility classes that are used to add the following methods to the classes above:
+
+`build_linear_sde`: `BuildLinearSDE` -> BuildBrownianLinearSDE, BuildOULinearSDE
+`check_sde`: `CheckSDE` -> CheckUnivSDE, CheckEllipticSDE, CheckHypoellipticSDE, CheckIntegratedSDE, CheckTwiceIntegratedSDE
 """
 
 import numpy as np
 import numpy.linalg as nla
 import scipy.stats as stats
 from sdes.sdes import SDE, MvSDE, MvEllipticSDE, HypoellipticSDE, BrownianMotion, OrnsteinUhlenbeck, MvIndepBrownianMotion, MvBrownianMotion, MvIndepOrnsteinUhlenbeck, MvOrnsteinUhlenbeck, TimeSwitchingSDE
-from sdes.sdes import HypoellipticSDE, IntegratedIndepBrownianMotion, IntegratedBrownianMotion, IntegratedIndepOrnsteinUhlenbeck, IntegratedOrnsteinUhlenbeck
+from sdes.sdes import HypoellipticSDE, IntegratedSDE, TwiceIntegratedSDE, IntegratedIndepBrownianMotion, IntegratedBrownianMotion, IntegratedIndepOrnsteinUhlenbeck, IntegratedOrnsteinUhlenbeck
 from sdes.sdes import TwiceIntegratedIndepBrownianMotion, TwiceIntegratedBrownianMotion, TwiceIntegratedIndepOrnsteinUhlenbeck, TwiceIntegratedOrnsteinUhlenbeck
-from sdes.path_integrals import log_girsanov, log_delyon_hu, log_drift_delyon_hu, log_van_der_meulen_schauer, mv_log_girsanov, mv_log_delyon_hu, mv_log_van_der_meulen_schauer
-from sdes.tools import log_abs_det, filter_step_var_cov, MeanAndCov
-from particles.distributions import ProbDist, Normal, VaryingCovNormal
+from sdes.path_integrals import log_girsanov, log_delyon_hu, log_van_der_meulen_schauer, mv_log_girsanov, mv_log_delyon_hu, mv_log_van_der_meulen_schauer
+from sdes.tools import log_abs_det, filter_step_var_cov, mv_filter_step_var_cov, MeanAndCov
+from particles.distributions import Normal, VaryingCovNormal
 
 # -----------------LinearSDE Proposal Classes -----------------
 
@@ -140,27 +193,64 @@ def add_tol(t_switch, func):
         return func(*new_args, **kwargs)
     return tol_func
 
-class LinearSDEProposal(object):
+def _self_tol_dec(self, func):
     """
-    Class that is used to add methods to the following classes:
-    
-    - ForwardProposal    
-    - VanDerMeulenSchauerAuxBridge
-    - MvEllipticForwardProposal
+    Used to decorate functions within `bridge_log_likelihood' method of 
+    the following classes: 
+    - MvDelyonHuAuxBridge 
     - MvVanDerMeulenSchauerAuxBridge
-    - LinearEndPointProposal    
+    """
+    if isinstance(self.SDE, TimeSwitchingSDE) and self.t_end == self.SDE.t_switch:
+        return add_tol(self.t_diff, func)
+    else:
+        return func
         
+class BuildLinearSDE(object):
+    """
+    Utility Class that is used to add the 'build_linear_sde' methods to the following classes:
+    
+    - ForwardProposal
+    - VanDerMeulenSchauerAuxBridge
+    - LinearEndPointProposal
+
+    - MvEllipticForwardProposal
+    - MvEllipticVanDerMeulenSchauerAuxBridge
+    - MvEllipticLinearEndPointProposal
+    
+    - MvIntegratedVanDerMeulenSchauerAuxBridge
+    - MvTwiceIntegratedVanDerMeulenSchauerAuxBridge
+    
+    - IntegratedLinearEndPointProposal
+    - TwiceIntegratedLinearEndPointProposal
+    
     We need to specify the following attributes:
 
-    any_cov (Forward proposals only)
-    full_cov (multivariate Forward Proposals only)
-    drift (Brownian proposals only)
+    any_cov (ForwardProposalBase/LinearEndPointPropoosalBase only)
+    full_cov (MvForwardProposal/MvLinearEndPointProposal only)
+    drift (Brownian LinearSDEs only)
     
     Due to the matching condition, the covariance matrix is predetermined by the diffusion of the signal at the end points
     in the case of auxiliary bridges.
+    
+    We need to add 3 decordators:
+    
+    - Rough comp dec: when the underlying SDE is Hypoelliptic
+    - SDE Tol Dec: When the underlying SDE is a TimeSwitchingSDE and/or is an instance of a multivariate diffusion bridge MvVanderMeulenSchauerAuxBridge
+    - Trim output: when N=1, we need to change the output that comes from the linearing functions to be of shape (N, dimX, dimW) -> (dimX, dimW).
     """   
+
+    def get_linearising_points(self):
+        if isinstance(self, ForwardProposalBase) or isinstance(self, LinearEndPointProposalBase):
+            return self.t_start, self.x_start
+        if isinstance(self, MvVanDerMeulenSchauerAuxBridge):
+            return self.t_end, self.x_end
+        if isinstance(self, AuxiliaryBridge):
+            return self.t_end - tol, self.x_end
+
     def _sde_tol_dec(self, func):
-        isforwardprop = isinstance(self.SDE, ForwardProposal)
+        if not isinstance(self, MvVanDerMeulenSchauerAuxBridge):
+            return func
+        isforwardprop = isinstance(self.SDE, ForwardProposalBase)
         sde = self.SDE.SDE if isforwardprop else self.SDE
         if isinstance(sde, TimeSwitchingSDE):
             if not isforwardprop:
@@ -172,36 +262,39 @@ class LinearSDEProposal(object):
         else:
             return func
 
-    def _self_tol_dec(self, func):
-        if isinstance(self.SDE, TimeSwitchingSDE) and self.t_end == self.SDE.t_switch:
-            return add_tol(self.t_diff, func)
-        else:
+    def _rough_comp_dec(self, func):
+        if not isinstance(self.SDE, HypoellipticSDE):
             return func
+        # Possible shapes for MV output: (N, dx, dx), (N, dx), (dx, dx)
+        def rough_comp_func(t, x):
+            dw = self.SDE.dimW; dx = self.SDE.dimX; N = self.N
+            out = func(t, x)
+            if out.shape == (dx, dw): # (dx, dw) -> # (dw, dw)
+                return out[-dw:, :]
+            elif out.shape == (N, dx, dw): # (N, dx, dw) -> # (N, dw, dw)
+                return out[:, -dw:, :]
+            elif out.shape == (N, dx):
+                return out[:, -dw:] # (N, dx) -> # (N, dw)
+            else:
+                return out
+        return rough_comp_func
 
-    def get_linearising_points(self):
-        if isinstance(self, ForwardProposal) or isinstance(self, LinearEndPointProposal):
-            return self.t_start, self.x_start
-        # if isinstance(self, LinearSDEForwardProposal):
-        #     return self.t_start, self.x_start
-        # if isinstance(self, AdaptiveForwardProposal):
-        #     return self.t_curr, self.x_curr
-        if isinstance(self, MvVanDerMeulenSchauerAuxBridge):
-            return self.t_end, self.x_end
-        if isinstance(self, AuxiliaryBridge):
-            return self.t_end - tol, self.x_end
-
-    def get_linear_sde_params(self):
-        t, x = self.get_linearising_points()
-        linearising_functions = self.take_rough_component_dec(self.get_linearising_functions()) if isinstance(self, HypoellipticLinearSDEProposal) else self.get_linearising_functions()
-        linear_sde_params = {param: func(t, x) for param, func in linearising_functions.items()}
-        if isinstance(self.SDE, MvForwardProposal) or isinstance(self.SDE, MvVanDerMeulenSchauerAuxBridge):
-            linear_sde_params.update({'N': self.N, 'dimX': self.dimX})
-        linear_sde_params = self.check_linear_sde_params(linear_sde_params)
-        self.check_matching_condition(linear_sde_params)
-        return linear_sde_params
-
-    def check_linear_sde_params(self, linear_sde_params):
-        return self.check_drift_param(self.check_diffusion_param(linear_sde_params))
+    def _check_dim_dec(self, func):
+        if not (self.N == 1 and isinstance(self.SDE, MvSDE)):
+            return func
+        dw = self.SDE.dimW; dx = self.SDE.dimX; N = self.N
+        def trim_output(t, x):
+            out = func(t, x)
+            return out.reshape(dx, dw) if out.shape == (N, dx, dw) else out                
+        return trim_output
+    
+    def get_linearising_functions(self):
+        linearising_functions = self._get_linearising_functions()
+        # Add any decorators here
+        decorators = [self._check_dim_dec, self._rough_comp_dec, self._sde_tol_dec]
+        for dec in decorators:
+            linearising_functions = {key: dec(func) for key, func in linearising_functions.items()}
+        return linearising_functions
 
     def check_diffusion_param(self, linear_sde_params):
         par = self.diffusion_param_name
@@ -216,76 +309,69 @@ class LinearSDEProposal(object):
             if self._diag_cov:
                 linear_sde_params[par] = self._diffusion_to_diag(diffusion)
         return linear_sde_params
-      
+
+    def _diffusion_to_diag(self, diffusion):
+        N = self.N
+        return np.stack([np.diag(diffusion[i]) for i in range(N)], axis=0) if N > 1 else np.diag(diffusion).reshape(N, self.dimW)
+    
+    def check_linear_sde_params(self, linear_sde_params):
+        return self.check_drift_param(self.check_diffusion_param(linear_sde_params))
+
     def check_matching_condition(self, linear_sde_params):
         par = self.diffusion_param_name
-        if isinstance(self, VanDerMeulenSchauerAuxBridge):
+        if isinstance(self, VanDerMeulenSchauerAuxBridge) or isinstance(self, MvVanDerMeulenSchauerAuxBridge):
             matching_condition = np.all(np.isclose(self.sigma_x_end, linear_sde_params[par]))
             if not matching_condition:
                 raise ValueError('Matching condition for bridge proposal not satisfied.')
-            
-    def _diffusion_to_diag(self, diffusion):
-        N = self.N
-        return np.stack([np.diag(diffusion[i]) for i in range(N)], axis=0) if N > 1 else np.diag(diffusion[0]).reshape(N, self.dimX)
+
+    def get_linear_sde_params(self):
+        t, x = self.get_linearising_points()
+        linearising_functions = self.get_linearising_functions()
+        linear_sde_params = {param: func(t, x) for param, func in linearising_functions.items()}
+        if isinstance(self.SDE, MvSDE):
+            linear_sde_params.update({'N': self.N, 'dimX': self.SDE.dimX})
+            linear_sde_params = self.check_drift_param(self.check_diffusion_param(linear_sde_params))
+        self.check_matching_condition(linear_sde_params)
+        return linear_sde_params
+    
+    @property
+    def LinearSDECls(self):
+        if not isinstance(self.SDE, MvSDE): # So, must be 
+            return self.UnivLinearSDECls
+        if isinstance(self.SDE, MvEllipticSDE):
+            if isinstance(self.SDE, MvEllipticVanDerMeulenSchauerAuxBridge):
+                return self.MvIndepLinearSDECls if self._diag_cov else self.MvLinearSDECls
+            else:
+                return self.MvIndepLinearSDECls if not self.full_cov else self.MvLinearSDECls
+        if isinstance(self.SDE, IntegratedSDE):
+            if isinstance(IntegratedVanDerMeulenSchauerAuxBridge):
+                return self.IntegratedIndepLinearSDECls if self._diag_cov else self.IntegratedLinearSDECls
+            else:
+                return self.IntegratedIndepLinearSDECls if not self.full_cov else self.IntegratedLinearSDECls            
+        if isinstance(self.SDE, TwiceIntegratedSDE):
+            if isinstance(TwiceIntegratedVanDerMeulenSchauerAuxBridge):
+                return self.TwiceIntegratedIndepLinearSDECls if self._diag_cov else self.TwiceIntegratedLinearSDECls
+            else:
+                return self.TwiceIntegratedIndepLinearSDECls if not self.full_cov else self.TwiceIntegratedLinearSDECls
 
     def build_linear_sde(self):
         self.LinearSDE = self.LinearSDECls(**self.get_linear_sde_params())
 
-class EllipticLinearSDEProposal(LinearSDEProposal):
+class BuildBrownianLinearSDE(BuildLinearSDE):
+    
+    UnivLinearSDECls = BrownianMotion
+    MvLinearSDECls = MvBrownianMotion
+    MvIndepLinearSDECls = MvIndepBrownianMotion
+    IntegratedLinearSDECls = IntegratedBrownianMotion
+    IntegratedIndepLinearSDECls = IntegratedIndepBrownianMotion
+    TwiceIntegratedSDECls = TwiceIntegratedBrownianMotion
+    TwiceIntegratedIndepLinearSDECls = TwiceIntegratedIndepBrownianMotion
+    
+    diffusion_param_name = 's'
 
-    @property
-    def LinearSDECls(self):
-        if not isinstance(self.SDE, MvSDE):
-            return self.UnivLinearSDECls
-        else:
-            if isinstance(self, MvVanDerMeulenSchauerAuxBridge):
-                return self.MvIndepLinearSDECls if self._diag_cov else self.MvLinearSDECls
-            else:
-                return self.MvIndepLinearSDECls if not self.full_cov else self.MvLinearSDECls
-
-class HypoellipticLinearSDEProposal(LinearSDEProposal):
-
-    @property
-    def LinearSDECls(self):
-        if not isinstance(self.SDE, MvSDE):
-            raise ValueError('Proposals based on hypoelliptic SDEs only exist multivariate SDEs.')
-        else:
-            if isinstance(self, MvVanDerMeulenSchauerAuxBridge):
-                return self.MvIndepLinearSDECls if self._diag_cov else self.MvLinearSDECls
-            else:
-                raise ValueError('Forward proposals for hypoelliptic SDEs not implemented.')
-
-    def _rough_comp_dec(self, func):
-        # Possible shapes for MV output: (N, dx, dx), (N, dx), (dx, dx)
-        def rough_comp_func(t, x):
-            dw = self.dimW; dx = self.dimX; N = self.N
-            out = func(t, x)
-            if out.shape == (dx, dw): # (dx, dw) -> # (N, dw)
-                return out[-dw:, :]
-            elif out.shape == (N, dx, dw): # (N, dx, dw) -> # (N, dw, dw)
-                return out[:, -dw:, :]
-            elif out.shape == (N, dx):
-                return out[:, -dw:] # (N, dx) -> # (N, dw)
-            else:
-                return out
-        return rough_comp_func
-
-    def take_rough_component_dec(self, linearising_functions):
-        return {key: self._rough_comp_dec(func) for key, func in linearising_functions.items()}
-
-class BrownianProposal(LinearSDEProposal):
-        
-    @property
-    def diffusion_param_name(self):
-        return 's'
-
-    def get_linearising_functions(self):
-        # m_func = self._b_time_shifted if isinstance(self.SDE, AdaptiveForwardProposal) else self.SDE.b
+    def _get_linearising_functions(self):
         m_func = self.SDE.b
         s_func = self.SDE.sigma
-        if isinstance(self, MvVanDerMeulenSchauerAuxBridge):
-            m_func = self._sde_tol_dec(m_func)
-            s_func = self._sde_tol_dec(s_func)
         return {'m': m_func, 's': s_func}
 
     def check_drift_param(self, linear_sde_params):
@@ -293,13 +379,20 @@ class BrownianProposal(LinearSDEProposal):
             linear_sde_params['m'] = np.zeros_like(linear_sde_params['m']) if isinstance(self.SDE, MvSDE) else 0.
         return linear_sde_params
 
-class OUProposal(LinearSDEProposal):
+    
+class BuildOULinearSDE(BuildLinearSDE):
 
-    @property
-    def diffusion_param_name(self):
-        return 'phi'
+    UnivLinearSDECls = OrnsteinUhlenbeck
+    MvLinearSDECls = MvOrnsteinUhlenbeck
+    MvIndepLinearSDECls = MvIndepOrnsteinUhlenbeck
+    IntegratedLinearSDECls = IntegratedOrnsteinUhlenbeck
+    IntegratedIndepLinearSDECls = IntegratedIndepOrnsteinUhlenbeck
+    TwiceIntegratedSDECls = TwiceIntegratedOrnsteinUhlenbeck
+    TwiceIntegratedIndepLinearSDECls = TwiceIntegratedIndepOrnsteinUhlenbeck
 
-    def get_linearising_functions(self):
+    diffusion_param_name = 'phi'
+    
+    def _get_linearising_functions(self):
         if not isinstance(self.SDE, MvSDE):
             return self.get_univ_linearising_functions()
         else:
@@ -323,88 +416,45 @@ class OUProposal(LinearSDEProposal):
             return nla.solve(-1.*self.SDE.db(t, x), self.SDE.b(t, x) - np.einsum('ijk,ik->ij', self.SDE.db(t, x), x))
         def phi(t, x):
             return self.SDE.sigma(t, x)
-        mv_linearising_functions = {'rho': rho, 'mu': mu, 'phi': phi}
-        if isinstance(self, MvVanDerMeulenSchauerAuxBridge):
-            mv_linearising_functions = {key: self._sde_tol_dec(func) for key, func in mv_linearising_functions.items()}
-        return mv_linearising_functions
+        return {'rho': rho, 'mu': mu, 'phi': phi}
     
     def check_drift_param(self, linear_sde_params):
         # Do nothing
         return linear_sde_params
+
+class CheckSDE(object):
+    """
+    Utility class to add `check_sde method to ForwardProposal, AuxiliaryBridge and EndPointProposal classes.
+    """
+    def check_sde(self):
+        if not isinstance(self.SDE, SDE):
+            raise ValueError(f'Input SDE is not an instance of an SDE.')
+        if not isinstance(self.SDE, self.CheckSDECls):
+            raise ValueError(f'The underlying SDE must be in class {self.CheckSDECls.__name__} for class {self.__class__.__name__}')
+
+class CheckUnivSDE(CheckSDE):
+    def check_sde(self):
+        if not isinstance(self.SDE, SDE):
+            raise ValueError(f'Input SDE is not an instance of an SDE.')
+        if isinstance(self.SDE, MvSDE):
+            raise ValueError(f'The underlying SDE must not be in class MvSDE for class {self.__class__.__name__}')
+
+class CheckEllipticSDE(CheckSDE):
+    CheckSDECls = MvEllipticSDE
+
+class CheckHypoellipticSDE(CheckSDE):
+    CheckSDECls = HypoellipticSDE
+
+class CheckIntegratedSDE(CheckSDE):
+    CheckSDECls = IntegratedSDE
+        
+class CheckTwiceIntegratedSDE(CheckSDE):
+    CheckSDECls = TwiceIntegratedSDE
     
-class EllipticBrownianProposal(EllipticLinearSDEProposal, BrownianProposal):
-
-    @property
-    def UnivLinearSDECls(self):
-        return BrownianMotion
-    
-    @property
-    def MvIndepLinearSDECls(self):
-        return MvIndepBrownianMotion
-    
-    @property
-    def MvLinearSDECls(self):
-        return MvBrownianMotion
-
-class EllipticOUProposal(EllipticLinearSDEProposal, OUProposal):
-
-    @property
-    def UnivLinearSDECls(self):
-        return OrnsteinUhlenbeck
-    
-    @property
-    def MvIndepLinearSDECls(self):
-        return MvIndepOrnsteinUhlenbeck
-    
-    @property
-    def MvLinearSDECls(self):
-        return MvOrnsteinUhlenbeck
-    
-
-class IntegratedBrownianProposal(HypoellipticLinearSDEProposal, BrownianProposal):
-
-    @property
-    def MvLinearSDECls(self):
-        return IntegratedBrownianMotion
-
-    @property
-    def MvIndepLinearSDECls(self):
-        return IntegratedIndepBrownianMotion
-    
-class TwiceIntegratedBrownianProposal(HypoellipticLinearSDEProposal, BrownianProposal):
-
-    @property
-    def MvLinearSDECls(self):
-        return TwiceIntegratedBrownianMotion
-
-    @property
-    def MvIndepLinearSDECls(self):
-        return TwiceIntegratedIndepBrownianMotion
-
-class IntegratedOUProposal(HypoellipticLinearSDEProposal, OUProposal):
-
-    @property
-    def MvLinearSDECls(self):
-        return IntegratedOrnsteinUhlenbeck
-
-    @property
-    def MvIndepLinearSDECls(self):
-        return IntegratedIndepOrnsteinUhlenbeck
-
-class TwiceIntegratedOUProposal(HypoellipticLinearSDEProposal, OUProposal):
-
-    @property
-    def MvLinearSDECls(self):
-        return TwiceIntegratedOrnsteinUhlenbeck
-    
-    @property
-    def MvIndepLinearSDECls(self):
-        return TwiceIntegratedIndepOrnsteinUhlenbeck
-
 
 # -----------------Univariate Forward Proposals-----------------
 
-class ForwardProposal(SDE):
+class ForwardProposalBase(SDE):
     """
     Proposal SDE based on the Forward decomposition. Continuous-time likelihood between this proposal and 
     the signal is given by the Girsanov formula.
@@ -427,12 +477,13 @@ class ForwardProposal(SDE):
         self.LY = LY
         self.sigmaY = sigmaY
         self.numerical_scheme = self.numerical_scheme_cls(self)
+        self.check_sde()
         self.build_linear_sde()
             
     @property
     def t_diff(self):
         return self.t_end - self.t_start
-
+    
     def sigma(self, t, x):
         return self.SDE.sigma(self.t_start + t, x)
 
@@ -445,25 +496,50 @@ class ForwardProposal(SDE):
     def simulate(self, size: int, num=5) -> np.ndarray:
         return super().simulate(size, self.x_start, 0., self.t_diff, num)
 
-    def end_point_proposal(self):
-        return self.LinearSDE.optimal_proposal_dist(self.t_start, self.t_end, self.x_start, self.y, self.LY, self.sigmaY)
+    def log_girsanov(self, X: np.ndarray):
+        step = float(X.dtype.names[0])
+        X_array = np.stack([self.x_start] + [X[name] for name in X.dtype.names], axis=1) # (N, num+1)
+        b_1 = self._b_time_shifted; b_2 = self._b_2; Cov = self.Cov
+        log_girsanov_wgts = self._log_girsanov(X_array, b_1, b_2, Cov, step)
+        return log_girsanov_wgts
+
+class ForwardProposal(ForwardProposalBase, CheckUnivSDE):
+    """
+    Only univariate forward proposals (with dimX=dimW=1) will be instances of this class.
+    """
+    
+    @property
+    def N(self):
+        if isinstance(self.x_start, float):
+            return 1
+        else:
+            return self.x_start.shape[0]
+        
+    def b(self, t, x):
+        drift = self._b_time_shifted(t, x) 
+        drift += self.Cov(t, x) * self._grad_log_py(t, x)
+        return drift
+
+    def db(self, t, x):
+        raise NotImplementedError(self._error_msg('db'))
 
     def b_vec(self, t, x):
         drift = self._b_time_shifted(t, x) 
         drift += self.Cov(t, x) * self.LinearSDE._vec_grad_log_py(t, self.t_diff, x, self.y, self.LY, self.sigmaY)
         return drift
+    
+    def _grad_log_py(self, t, x):
+        return self.LinearSDE.grad_log_py(t, self.t_diff, x, self.y, self.LY, self.sigmaY)
 
-    def log_girsanov(self, X: np.ndarray):
-        names = X.dtype.names
-        step = float(names[0])
-        X_array = np.stack([self.x_start] + [X[name] for name in names], axis=1) # (N, num+1)
-        b_1 = self._b_time_shifted; b_2 = self.b_vec; Cov = self.Cov
-        log_girsanov_wgts = log_girsanov(X_array, b_1, b_2, Cov, step)
-        return log_girsanov_wgts
+    def _b_2(self, t, x):
+        return self.b_vec(t, x)
+    
+    def _log_girsanov(self, X_array, b_1, b_2, Cov, step):
+        return log_girsanov(X_array, b_1, b_2, Cov, step)
 
 # -----------------Brownian Univariate Forward Proposals - 4 Classes -----------------
 
-class NoDriftBasicBrownianProp(ForwardProposal, EllipticBrownianProposal):
+class NoDriftBasicBrownianProp(ForwardProposal, BuildBrownianLinearSDE):
     """
     Forward proposal that always takes the standard Brownian motion as the linear SDE
     for evaulation of the proxy. Not adaptive to the end points of previous particles.
@@ -475,7 +551,7 @@ class NoDriftBasicBrownianProp(ForwardProposal, EllipticBrownianProposal):
     any_cov = False
     drift = False
 
-class DriftBasicBrownianProp(ForwardProposal, EllipticBrownianProposal):
+class DriftBasicBrownianProp(ForwardProposal, BuildBrownianLinearSDE):
     """
     $$dX_t = b(t_start, x_start)dt + dW_t$$
     """
@@ -483,7 +559,7 @@ class DriftBasicBrownianProp(ForwardProposal, EllipticBrownianProposal):
     any_cov = False
     drift = True
     
-class NoDriftBrownianProp(ForwardProposal, EllipticBrownianProposal):
+class NoDriftBrownianProp(ForwardProposal, BuildBrownianLinearSDE):
     """
     $$dX_t = \sigma(t_start, x_start) dW_t$$
     """
@@ -491,7 +567,7 @@ class NoDriftBrownianProp(ForwardProposal, EllipticBrownianProposal):
     any_cov = True
     drift = False
     
-class DriftBrownianProp(ForwardProposal, EllipticBrownianProposal):
+class DriftBrownianProp(ForwardProposal, BuildBrownianLinearSDE):
     """
     $$dX_t = b(t_start, x_start)dt + \sigma(t_start, x_start)dW_t$$
     """
@@ -501,7 +577,7 @@ class DriftBrownianProp(ForwardProposal, EllipticBrownianProposal):
 
 # -----------------OU Univariate Forward Proposals - 2 Classes -----------------
 
-class LocalLinearBasicOUProp(ForwardProposal, EllipticOUProposal):
+class LocalLinearBasicOUProp(ForwardProposal, BuildOULinearSDE):
     """
     Note: if the signal process is an OU-process, this proposal recovers the same OU-process,
     thus we obtain the optimal proposal.
@@ -516,7 +592,7 @@ class LocalLinearBasicOUProp(ForwardProposal, EllipticOUProposal):
     sname='BOUP'
     any_cov = False
 
-class LocalLinearOUProp(ForwardProposal, EllipticOUProposal):
+class LocalLinearOUProp(ForwardProposal, BuildOULinearSDE):
     """
     Note: if the signal process is an OU-process, this proposal recovers the same OU-process,
     thus we obtain the optimal proposal.
@@ -534,42 +610,24 @@ class LocalLinearOUProp(ForwardProposal, EllipticOUProposal):
 
 # -----------------Univariate Diffusion Bridge Proposals-----------------
 
-class AuxiliaryBridge(SDE):
+class AuxiliaryBridgeBase(SDE):
     """
     Base class for auxiliary bridges.
 
-    We use this class to construct any 1-D auxiliary bridge process.
-
-    Given an SDE with certain drift and diffusion coefficient, a starting time, and end time, 
-    a starting point and an ending point, this defines a diffusion bridge. It is not possible
-    to simulate from this diffusion bridge, as the drift of the diffusion bridge involves the 
-    transition density of the SDE, which is typically intractable. An auxiliary bridge process
-    is a diffusion that starts and ends at the same points as the diffusion bridge, with known 
-    drift, with law that dominates that of the diffusion bridge. Further, the continuous-time 
-    likelihood can be evaluated up to discretisation (i.e all the terms inside the path integrals
-    are tractable). 
+    Any auxiliary bridge of any type (univariate, mv elliptic, mv hypoelliptic) will be an instance of this class.
     """
     def __init__(self, sde, t_start, t_end, x_end):
         self.SDE = sde
         self.x_end = x_end
         self.t_start = t_start
         self.t_end = t_end
+        self.check_sde()
         self.numerical_scheme = self.numerical_scheme_cls(self)
     
     @property
     def t_diff(self):
         return self.t_end - self.t_start
-
-    @property
-    def N(self):
-        if isinstance(self.x_end, float):
-            return 1
-        else:
-            return self.x_end.shape[0]
-    
-    def b(self, t, x):
-        raise NotImplementedError(self._error_msg('b'))
-    
+        
     def sigma(self, t, x):
         return self.SDE.sigma(self.t_start + t, x)
     
@@ -578,9 +636,6 @@ class AuxiliaryBridge(SDE):
 
     def _b_vec_time_shifted(self, t, x):
         return self.SDE.b_vec(self.t_start + t, x)
-
-    def bridge_log_likelihood(self, x_start, X):
-        raise NotImplementedError(self._error_msg('bridge_log_likelihood'))
     
     def simulate(self, size, x_start, num=5):
         if size != self.N and self.N > 1:
@@ -602,12 +657,22 @@ class AuxiliaryBridge(SDE):
         last_name = X.dtype.names[-1]
         if not np.all(np.isclose(X[last_name], self.x_end)):
             raise ValueError('End points of paths do not match end points of auxiliary bridge.')
-        
+
+class AuxiliaryBridge(AuxiliaryBridgeBase, CheckUnivSDE):
+    """
+    Only univarite auxiliary bridges (with dimX=dimW=1) will be instances of this class.
+    """
+    @property
+    def N(self):
+        if isinstance(self.x_end, float):
+            return 1
+        else:
+            return self.x_end.shape[0]
+
 class DelyonHuAuxBridge(AuxiliaryBridge):
     """
     The auxiliary bridge as proposed by Delyon and Hu (2006).
-    """
-    
+    """    
     sname='DH'
     
     def b(self, t, x):
@@ -623,11 +688,14 @@ class DelyonHuAuxBridge(AuxiliaryBridge):
         log_density = stats.norm.logpdf(x_end, loc=x_start, scale=np.sqrt(Delta_s * self.Cov(0, x_start)))
         log_det_covs = 0.5*(np.log(Cov(0, x_start)) - np.log(Cov(Delta_s, x_end))) # (N, )
         # The path integrals
-        log_path_integral_wgts = log_delyon_hu(X_array, b, Cov, step) # (N, )
+        log_path_integral_wgts = self.log_delyon_hu(X_array, b, Cov, step) # (N, )
         log_wgts = log_density + log_det_covs + log_path_integral_wgts
         return log_wgts
+    
+    def log_delyon_hu(self, X_array, b, Cov, step):
+        return log_delyon_hu(X_array, b, Cov, step)
 
-class DriftDelyonHuAuxBridge(AuxiliaryBridge):
+class DriftDelyonHuAuxBridge(DelyonHuAuxBridge):
     """
     The Delyon-Hu bridge, with the drift added on. This will work fine for constant diffusion coefficients.
     """
@@ -635,19 +703,10 @@ class DriftDelyonHuAuxBridge(AuxiliaryBridge):
     def b(self, t, x):
         return self._b_time_shifted(t, x) + (self.x_end - x)/(self.t_diff - t)
     
-    def bridge_log_likelihood(self, x_start, X):
-        self._check_end_points_match(X)
-        b = self._b_vec_time_shifted if hasattr(self.SDE, "b_vec") else self._b_time_shifted
-        Cov = self.Cov
-        t_end = X.dtype.names[-1]; x_end = X[t_end] # (N, )
-        X_array = np.stack([x_start] + [X[name] for name in X.dtype.names], axis=1) # (N, num+1)
-        step = float(X.dtype.names[0]); num = X_array.shape[1] - 1; Delta_s = step*num
-        log_density = stats.norm.logpdf(x_end, loc=x_start, scale=np.sqrt(Delta_s * self.Cov(0, x_start)))
-        log_det_covs = 0.5*(np.log(Cov(0, x_start)) - np.log(Cov(Delta_s, x_end)))
-        # The path integrals
-        log_path_integral_wgts = log_drift_delyon_hu(X_array, b, Cov, step) # (N, )
-        log_wgts = log_density + log_det_covs + log_path_integral_wgts
-        return log_wgts
+    def log_delyon_hu(self, X_array, b, Cov, step):
+        # Note: this function has not been tested yet.
+        raise NotImplementedError('Continuous-time likelihood for Delyon-Hu bridge with drift not implemented/tested yet.')
+        #return log_drift_delyon_hu(X_array, b, Cov, step)
     
 class VanDerMeulenSchauerAuxBridge(AuxiliaryBridge):
     """
@@ -659,9 +718,12 @@ class VanDerMeulenSchauerAuxBridge(AuxiliaryBridge):
 
     def b(self, t, x):
         drift = self._b_time_shifted(t, x) 
-        drift += self.Cov(t, x) * self.LinearSDE.grad_log_px(t, self.t_diff, x, self.x_end)
+        drift += self.Cov(t, x) * self._grad_log_px(t, x)
         return drift
     
+    def _grad_log_px(self, t, x):
+        return self.LinearSDE.grad_log_px(t, self.t_diff, x, self.x_end)
+
     def bridge_log_likelihood(self, x_start, X):
         self._check_end_points_match(X)
         b = self._b_vec_time_shifted if hasattr(self.SDE, "b_vec") else self._b_time_shifted
@@ -681,7 +743,7 @@ class VanDerMeulenSchauerAuxBridge(AuxiliaryBridge):
 
 # -----------------Brownian Univariate Auxiliary Bridges - 2 Classes -----------------
 
-class NoDriftBrownianAuxBridge(VanDerMeulenSchauerAuxBridge, EllipticBrownianProposal):
+class NoDriftBrownianAuxBridge(VanDerMeulenSchauerAuxBridge, BuildBrownianLinearSDE):
     """
     Auxiliary bridge proposal that always takes the Brownian motion as the linear SDE
     for evaulation of the proxy. 
@@ -691,7 +753,7 @@ class NoDriftBrownianAuxBridge(VanDerMeulenSchauerAuxBridge, EllipticBrownianPro
     sname='NDBr'
     drift=False
 
-class DriftBrownianAuxBridge(VanDerMeulenSchauerAuxBridge, EllipticBrownianProposal):
+class DriftBrownianAuxBridge(VanDerMeulenSchauerAuxBridge, BuildBrownianLinearSDE):
     """
     Auxiliary bridge that always takes the Brownian motion as the linear SDE
     for evaulation of the proxy. Diffusion of each path is given by the 
@@ -704,7 +766,7 @@ class DriftBrownianAuxBridge(VanDerMeulenSchauerAuxBridge, EllipticBrownianPropo
 
 # -----------------OU Univariate Auxiliary Bridges - 1 Class -----------------
 
-class LocalLinearOUAuxBridge(VanDerMeulenSchauerAuxBridge, EllipticOUProposal):
+class LocalLinearOUAuxBridge(VanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
     """
     Auxiliary bridge that takes the OU process as the linear SDE for evaluation of the proxy.
     Drift coefficient is obtained through local linearisation of the drift of the signal 
@@ -723,9 +785,87 @@ class LocalLinearOUAuxBridge(VanDerMeulenSchauerAuxBridge, EllipticOUProposal):
     """
     sname='OU'
 
+
+# -----------------Univariate End Point Proposals-----------------
+
+class EndPointProposal(object):
+    """
+    Base class for end point proposals used in Backward Guided/Backward Reparameterised Feynman-Kac models.
+    
+    Other strategies could be developed for proposing the end point: for example, one could use a locally 
+    Gaussian numerical scheme.    
+    """
+    pass
+
+class LinearEndPointProposalBase(EndPointProposal):
+    """
+    All end point proposals based on the construction of a Linear SDE and Gaussian conditioning on the
+    observation y_t are subclassess of this base class.
+    """
+    def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
+        self.SDE = sde
+        self.x_start = x_start
+        self.t_start = t_start
+        self.t_end = t_end
+        self.y = y
+        self.LY = LY
+        self.sigmaY = sigmaY
+        self.check_sde()
+        self.build_linear_sde()
+        pred = MeanAndCov(self.pred_loc, self.pred_cov)
+        self.opt_prop_loc, self.opt_prop_cov = self.filter_step_var_cov(LY, sigmaY ** 2, pred, y)
+
+    @property
+    def dimX(self):
+        return self.SDE.dimX
+
+class LinearEndPointProposal(Normal, LinearEndPointProposalBase, CheckUnivSDE):
+    """
+    Univariate linear SDE end point proposals are subclasses of this class.
+    """
+    def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
+        LinearEndPointProposalBase.__init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY)
+        Normal.__init__(self, loc=self.opt_prop_loc, scale=np.sqrt(self.opt_prop_cov))
+
+    @property
+    def N(self):
+        if isinstance(self.x_start, float):
+            return 1
+        else:
+            return self.x_start.shape[0]
+
+    @property
+    def pred_loc(self):
+        s = self.t_start; t = self.t_end; x_s = self.x_start
+        A = self.LinearSDE._a(s, t); b = self.LinearSDE._b(s, t)
+        return A*x_s + b
+
+    @property
+    def pred_cov(self):
+        return self.LinearSDE._v(self.t_start, self.t_end)
+
+    def filter_step_var_cov(self, LY, sigmaY, pred, y):
+        return filter_step_var_cov(LY, sigmaY ** 2, pred, y)
+
+# --------------- Univariate End Point Proposals: 3 Classes ----------------
+
+class NaiveEndPointProposal(LinearEndPointProposal, BuildBrownianLinearSDE):
+    sname = 'NDBBrP'
+    any_cov = False
+    drift = False
+    
+class EulerMaruyamaEndPointProposal(LinearEndPointProposal, BuildBrownianLinearSDE):   
+    sname = 'DBrP'
+    any_cov = True
+    drift = True
+
+class OUEndPointProposal(LinearEndPointProposal, BuildOULinearSDE):
+    sname = 'OUP'
+    any_cov = True
+    
 # ----------------- Multivariate Forward Proposals-----------------
 
-class MvForwardProposal(MvSDE, ForwardProposal):
+class MvForwardProposal(ForwardProposalBase, MvSDE):
     """
     Proposal SDE based on the Forward decomposition. Continuous-time likelihood between this proposal and 
     the signal is given by the Girsanov formula.
@@ -740,9 +880,6 @@ class MvForwardProposal(MvSDE, ForwardProposal):
 
     Inputs: x_start: (N, dimX)
     """    
-    def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
-        ForwardProposal.__init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY)
-        self.check_sde()
 
     @property
     def dimX(self):
@@ -755,80 +892,38 @@ class MvForwardProposal(MvSDE, ForwardProposal):
     @property
     def N(self):
         return self.x_start.shape[0]
-        
-    @property
-    def _diag_cov(self):
-        return self.SDE._diag_cov
 
     def b(self, t, x):
         """
         Input: float, (N, dimX)
         Returns: (N, dimX)
         """
-        drift = self._b_time_shifted(t, x) # Inherited from ForwardProposal
-        drift += np.einsum('ijk,ik->ij', self.Cov(t, x), self.LinearSDE.grad_log_py(t, self.t_diff, x, self.y, self.LY, self.sigmaY)) # (N, dimX)
+        drift = self._b_time_shifted(t, x) # Inherited from ForwardProposalBase
+        drift += np.einsum('ijk,ik->ij', self.Cov(t, x), self._grad_log_py(t, x)) # (N, dimX)
         return drift
 
     def db(self, t, x):
         """
-        To do: think about the special cases in which we can just take the derivative of the original diffusion process.
+        THIS IMPLEMENTATION IS INCORRECT. NEED TO FIX.
         """
-    # Used to construct a linear SDE for an auxiliary bridge for a forward proposal. 
-    # Come back to this an implement if you really need it.
-        db = self.SDE.db(self.t_start + t, x) # (N, dimX, dimX)
-        # For now, we omit the general case where the diffusion coefficient is state-dependent.
-        # db += 2.*self.SDE.dsigma(self.t_start + t, x)*self.sigma(t, x)*self.LinearSDE.grad_log_py(t, self.t_diff, x, self.y, self.LY, self.sigmaY)
-        # db += self.Cov(t, x) * self.LinearSDE.grad_grad_log_py(t, self.t_diff, self.y, self.LY, self.sigmaY)
-        return db
+        # db = self.SDE.db(self.t_start + t, x) # (N, dimX, dimX)
+        raise NotImplementedError('Need to fix this implementation.')
 
-    def sigma(self, t, x):
-        """
-        Input: (float, (N, dimX))
-        Returns: (N, dimX, dimX)
-        """
-        return self.SDE.sigma(self.t_start + t, x)
+    def _grad_log_py(self, t, x):
+        return self.LinearSDE.grad_log_py(t, self.t_diff, x, self.y, self.LY, self.sigmaY)
 
-    def dsigma(self, t, x):
-        """
-        Inputs: float, (N, dimX)
-        Returns: float, (N, dimX, dimX, dimX)
-        """
-        return self.SDE.dsigma(self.t_start + t, x)
+    def _b_2(self, t, x):
+        return self.b(t, x)
     
-    def simulate(self, size: int, num=5) -> np.ndarray:
-        return super().simulate(size, num)
+    def _log_girsanov(self, X_array, b_1, b_2, Cov, step):
+        return mv_log_girsanov(X_array, b_1, b_2, Cov, step)
 
-    def log_girsanov(self, X: np.ndarray):
-        """
-        Inputs: 
-        ------------
-        x_start: (N, dimX) array
-        X: structured array with fields '0.0', '0.1', ..., '1.0' (N, num)
-        
-        Returns:
-        ------------
-        (N, ) Array of weights
-        """
-        step = float(X.dtype.names[0])
-        X_array = np.stack([self.x_start] + [X[name] for name in X.dtype.names], axis=0) # (num+1, N, dimX)
-        b_1 = self._b_time_shifted; b_2 = self.b; Cov = self.Cov
-        log_girsanov_wgts = mv_log_girsanov(X_array, b_1, b_2, Cov, step)
-        return log_girsanov_wgts
-
-    def end_point_proposal(self):
-        return ForwardProposal.end_point_proposal(self)
-
-class MvEllipticForwardProposal(MvForwardProposal):
-    
-    def check_sde(self):
-        if not isinstance(self.SDE, MvEllipticSDE):
-            raise ValueError('The underlying SDE must be an elliptic SDE for elliptic forward proposals.')
-
-
+class MvEllipticForwardProposal(MvForwardProposal, CheckEllipticSDE):
+    pass
 
 #----------------- Brownian Multivariate Forward Proposals: 6 Classes-----------------    
 
-class MvNoDriftBasicBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal):
+class MvNoDriftBasicBrownianProp(MvEllipticForwardProposal, BuildBrownianLinearSDE):
     """
     Forward proposal that always takes the standard Brownian motion as the linear SDE
     for evaulation of the proxy. Not adaptive to the end points of previous particles.
@@ -840,7 +935,7 @@ class MvNoDriftBasicBrownianProp(MvEllipticForwardProposal, EllipticBrownianProp
     any_cov = False
     drift = False
 
-class MvDriftBasicBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal):
+class MvDriftBasicBrownianProp(MvEllipticForwardProposal, BuildBrownianLinearSDE):
     """
     Forward proposal that takes the standard Brownian motion with a drift component as the linear SDE
     for evaulation of the proxy. 
@@ -851,7 +946,7 @@ class MvDriftBasicBrownianProp(MvEllipticForwardProposal, EllipticBrownianPropos
     any_cov = False
     drift = True
     
-class MvNoDriftIndepBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal):
+class MvNoDriftIndepBrownianProp(MvEllipticForwardProposal, BuildBrownianLinearSDE):
     """
     Forward proposal that always takes the Brownian motion as the linear SDE
     for evaulation of the proxy. Diffusion of each path is given by the 
@@ -866,7 +961,7 @@ class MvNoDriftIndepBrownianProp(MvEllipticForwardProposal, EllipticBrownianProp
     full_cov = False
     drift = False
 
-class MvNoDriftBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal):
+class MvNoDriftBrownianProp(MvEllipticForwardProposal, BuildBrownianLinearSDE):
     """
     Forward proposal that always takes the Brownian motion as the linear SDE
     for evaulation of the proxy. Diffusion of each path is given by the 
@@ -882,7 +977,7 @@ class MvNoDriftBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal)
     full_cov = True
     drift = False
 
-class MvDriftIndepBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal):
+class MvDriftIndepBrownianProp(MvEllipticForwardProposal, BuildBrownianLinearSDE):
     """
     Forward proposal that always takes the Brownian motion as the linear SDE
     for evaulation of the proxy. Drift/diffusion constants are given by the 
@@ -898,7 +993,7 @@ class MvDriftIndepBrownianProp(MvEllipticForwardProposal, EllipticBrownianPropos
     full_cov = False
     drift = True
         
-class MvDriftBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal):
+class MvDriftBrownianProp(MvEllipticForwardProposal, BuildBrownianLinearSDE):
     """
     Forward proposal that always takes the Brownian motion as the linear SDE
     for evaulation of the proxy. Drift/diffusion constants are given by the 
@@ -917,16 +1012,18 @@ class MvDriftBrownianProp(MvEllipticForwardProposal, EllipticBrownianProposal):
 
 #----------------- OU Multivariate Forward Proposals 3 Classes-----------------    
 
-class MvBasicOUProposal(MvEllipticForwardProposal, EllipticOUProposal):
+class MvBasicOUProposal(MvEllipticForwardProposal, BuildOULinearSDE):
+    
     sname = 'MvBOUP'
     any_cov = False
     
-class MvIndepOUProposal(MvEllipticForwardProposal, EllipticOUProposal):
+class MvIndepOUProposal(MvEllipticForwardProposal, BuildOULinearSDE):
+    
     sname = 'MvIOUP'
     any_cov = True
     full_cov = False
 
-class MvOUProposal(MvEllipticForwardProposal, EllipticOUProposal):    
+class MvOUProposal(MvEllipticForwardProposal, BuildOULinearSDE):    
 
     sname = 'MvOUP'
     any_cov = True
@@ -934,10 +1031,11 @@ class MvOUProposal(MvEllipticForwardProposal, EllipticOUProposal):
 
 # ----------------- Multivariate Diffusion Bridge Proposals-----------------
 
-class MvAuxiliaryBridge(MvSDE, AuxiliaryBridge):
+
+class MvAuxiliaryBridge(AuxiliaryBridgeBase, MvSDE):
 
     def __init__(self, *args):
-        AuxiliaryBridge.__init__(self, *args)
+        AuxiliaryBridgeBase.__init__(self, *args)
         if self.x_end.shape[1] != self.SDE.dimX:
             raise ValueError(f'Second dimension of end point array must match dimension of underlying SDE: {self.x_end.shape[1]}!={self.SDE.dimX}')
 
@@ -952,104 +1050,53 @@ class MvAuxiliaryBridge(MvSDE, AuxiliaryBridge):
     @property
     def N(self):
         return self.x_end.shape[0]
-    
-    def b(self, t, x):
-        raise NotImplementedError(self._error_msg('b'))
-    
-    def sigma(self, t, x):
-        return self.SDE.sigma(self.t_start + t, x)
-    
-    # def _b_vec_time_shifted(self, t, x): # This inherits from AuxiliaryBridge, but you need to implement b_vec for the underlying
-    #     return self.SDE.b_vec(self.t_start + t, x)
 
-    def bridge_log_likelihood(self, x_start, X):
-        raise NotImplementedError(self._error_msg('bridge_log_likelihood'))
-    
-    def simulate(self, size, x_start, num=5):
-        N = self.N; x_end = self.x_end
-        if N == 1 and size != 1:
-            x_end = np.concatenate([self.x_end]*size, axis=0) # (size, dimX)
-        if size != N and N > 1:
-            raise ValueError(f'Simulation size {size} should match number of end point vectors ({self.N}).')
-        if x_start.shape not in  [(self.N, self.dimX), (1, self.dimX)] and N>1:
-            raise ValueError(f'Starting point array shape {x_start.shape} should be (N, dimX) ({self.N}, {self.dimX}) or (1, dimX) for N>1: N={self.N}.')
-        if x_start.shape == (1, self.dimX) and N > 1:
-            x_start = np.concatenate([x_start]*N)
-        simulation = super().simulate(size, x_start=x_start, num=num)
-        end_point = simulation.dtype.names[-1]
-        simulation[end_point] = x_end
-        return simulation
-        
-    def _check_end_points_match(self, X):
-        last_name = X.dtype.names[-1]
-        if not np.all(np.isclose(X[last_name], self.x_end)):
-            raise ValueError('End points of paths do not match end points of auxiliary bridge.')
-        
-    def transform_X_to_W(self, X, x_start):
-        if isinstance(self, HypoellipticAuxiliaryBridge):
-            raise ValueError('Cannot transform X to W for a hypoelliptic auxiliary bridge.')
-        return AuxiliaryBridge.transform_X_to_W(self, X, x_start)
+class MvEllipticAuxiliaryBridge(MvAuxiliaryBridge, CheckEllipticSDE):
+    pass
 
-class MvEllipticAuxiliaryBridge(MvAuxiliaryBridge):
-    
-    def __init__(self, *args):
-        MvAuxiliaryBridge.__init__(self, *args)
-        self.check_sde()
-        
-    def check_sde(self):
-        if not isinstance(self.SDE, MvEllipticSDE):
-            raise ValueError('For an elliptic auxiliary bridge, underlying SDE must be an elliptic SDE.')
-
-class MvDelyonHuAuxBridge(MvEllipticAuxiliaryBridge, DelyonHuAuxBridge):
+class MvDelyonHuAuxBridge(MvEllipticAuxiliaryBridge):
     """
     The auxiliary bridge as proposed by Delyon and Hu (2006).
     """
     sname = 'MvDH'
     def b(self, t, x):
-        return (self.x_end - x)/(self.t_diff - t)
+        return DelyonHuAuxBridge.b(self, t, x)
 
     def bridge_log_likelihood(self, x_start, X):
         self._check_end_points_match(X)
-        tol_dec = self._self_tol_dec
+        tol_dec = lambda func: _self_tol_dec(self, func)
         b = tol_dec(self._b_time_shifted); Cov = tol_dec(self.Cov)
         X_array = np.stack([x_start] + [X[name] for name in X.dtype.names], axis=0) # (num+1, N, dimX)
         step = float(X.dtype.names[0]); num = X_array.shape[0] - 1; Delta_s = step*num
         log_density = VaryingCovNormal(loc=x_start, cov=Delta_s*Cov(0, x_start)).logpdf(self.x_end) # (N, )
         log_det_covs = 0.5 * (log_abs_det(Cov(0, x_start)) - log_abs_det(Cov(Delta_s, self.x_end))) # (N, )
         # The path integrals
-        log_path_integral_wgts = mv_log_delyon_hu(X_array, b, Cov, step) # (N, )
+        log_path_integral_wgts = self.mv_log_delyon_hu(X_array, b, Cov, step) # (N, )
         log_wgts = log_density + log_det_covs + log_path_integral_wgts # (N, )
         return log_wgts
+
+    def mv_log_delyon_hu(self, X_array, b, Cov, step):
+        return mv_log_delyon_hu(X_array, b, Cov, step)
     
-class MvDriftDelyonHuAuxBridge(MvEllipticAuxiliaryBridge, DriftDelyonHuAuxBridge):
+class MvDriftDelyonHuAuxBridge(MvEllipticAuxiliaryBridge):
     """
     The Delyon-Hu bridge, with the drift added on. This will work fine for constant diffusion coefficients.
     """
     
     sname = 'MvDDH'
     def b(self, t, x):
-        return (self._b_time_shifted(t, x) + (self.x_end - x)/(self.t_diff - t))
+        return DriftDelyonHuAuxBridge.b(self, t, x)
     
-    def bridge_log_likelihood(self, x_start, X):
-        self._check_end_points_match(X)
-        tol_dec = self._self_tol_dec
-        b = tol_dec(self._b_time_shifted); Cov = tol_dec(self.Cov)
-        X_array = np.stack([x_start] + [X[name] for name in X.dtype.names], axis=0) # (num+1, N, dimX)
-        step = float(X.dtype.names[0]); num = X_array.shape[1] - 1; Delta_s = step*num
-        log_density = VaryingCovNormal(loc=x_start, scale=Delta_s*Cov(0, x_start)).logpdf(self.x_end)
-        log_det_covs = 0.5 * (log_abs_det(Cov(0, x_start)) - log_abs_det(Cov(Delta_s, self.x_end)))
-        # The path integrals
-        log_path_integral_wgts = mv_log_delyon_hu(X_array, b, Cov, step) # (N, )
-        log_wgts = log_density + log_det_covs + log_path_integral_wgts
-        return log_wgts
-
-class MvVanDerMeulenSchauerAuxBridge(MvAuxiliaryBridge, VanDerMeulenSchauerAuxBridge):
+    def mv_log_delyon_hu(self, X_array, b, Cov, step):
+        raise NotImplementedError('Continuous-time likelihood for Delyon-Hu bridge with drift not implemented/tested yet.')
+    
+class MvVanDerMeulenSchauerAuxBridge(MvAuxiliaryBridge):
     """
     The class of guided bridge proposals based on Linear SDEs:
     """
     def __init__(self, sde, t_start, t_end, x_end):
-        VanDerMeulenSchauerAuxBridge.__init__(self, sde, t_start, t_end, x_end)
-        self.check_sde()
+        super().__init__(self, sde, t_start, t_end, x_end)
+        self.build_linear_sde()
 
     def b(self, t, x):
         drift = self._b_time_shifted(t, x) # (N, dimX)
@@ -1079,7 +1126,7 @@ class MvVanDerMeulenSchauerAuxBridge(MvAuxiliaryBridge, VanDerMeulenSchauerAuxBr
         
     def bridge_log_likelihood(self, x_start, X):
         self._check_end_points_match(X)
-        tol_dec = self._self_tol_dec
+        tol_dec = lambda func: _self_tol_dec(self, func)
         b = tol_dec(self._b_time_shifted); Cov = tol_dec(self.Cov)
         linear_sde = self.LinearSDE; step = float(X.dtype.names[0])
         X_array = np.stack([x_start] + [X[name] for name in X.dtype.names], axis=0) # (num+1, N, dimX)
@@ -1089,11 +1136,13 @@ class MvVanDerMeulenSchauerAuxBridge(MvAuxiliaryBridge, VanDerMeulenSchauerAuxBr
         log_path_integral_wgts = mv_log_van_der_meulen_schauer(X_array, b, Cov, linear_sde, step) # (N, )
         log_wgts = log_linear_sde_density + log_path_integral_wgts
         return log_wgts
- 
+
+class MvEllipticVanDerMeulenSchauerAuxBridge(MvVanDerMeulenSchauerAuxBridge, MvEllipticAuxiliaryBridge):
+    pass 
 
 # ---------------Multivariate Brownian Auxiliary Bridge Proposals: 2 Classes ----------------
 
-class MvNoDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, MvEllipticAuxiliaryBridge, EllipticBrownianProposal):
+class MvNoDriftBrownianAuxBridge(MvEllipticVanDerMeulenSchauerAuxBridge, BuildBrownianLinearSDE):
     """
     Auxiliary bridge proposal that takes the Brownian motion as the linear SDE
     for evaulation of the proxy, without the drift. 
@@ -1103,7 +1152,7 @@ class MvNoDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, MvEllipticAuxil
     sname = 'MvNDBr'    
     drift = False
 
-class MvDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, EllipticBrownianProposal):
+class MvDriftBrownianAuxBridge(MvEllipticVanDerMeulenSchauerAuxBridge, BuildBrownianLinearSDE):
     """
     Auxiliary bridge proposal that takes the Brownian motion as the linear SDE
     for evaulation of the proxy, without the drift. 
@@ -1116,7 +1165,7 @@ class MvDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, EllipticBrownianP
 # ---------------Multivariate OU Auxiliary Bridge Proposals: 1 Class ----------------
 
 
-class MvLLOUAuxBridge(MvVanDerMeulenSchauerAuxBridge, EllipticOUProposal):
+class MvLLOUAuxBridge(MvEllipticVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
     """
     Auxiliary bridge that takes the OU process as the linear SDE for evaluation of the proxy.
     Drift coefficient is obtained through local linearisation of the drift of the signal 
@@ -1137,165 +1186,161 @@ class MvLLOUAuxBridge(MvVanDerMeulenSchauerAuxBridge, EllipticOUProposal):
     """
     sname = 'MvOU'
 
+# ---------------Multivariate Elliptic End Point Proposals ----------------
 
-# ---------------Hypoelliptic Auxiliary Bridge Proposals:  ----------------
-
-class HypoellipticAuxiliaryBridge(MvAuxiliaryBridge):
-
-    def check_sde(self):
-        if not isinstance(self.SDE, HypoellipticSDE):
-            raise ValueError('For a hypoelliptic auxiliary bridge, underlying SDE must be a hypoelliptic SDE.')
-
-# ---------------Hypoelliptic Brownian Auxiliary Bridge Proposals: 4 Classes ----------------
-
-class IntegratedDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, HypoellipticAuxiliaryBridge, IntegratedBrownianProposal):
-    sname = 'H1IDBr'
-    drift = True
-
-class IntegratedNoDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, HypoellipticAuxiliaryBridge, IntegratedBrownianProposal):
-    sname = 'H1INDBr'
-    drift = False
-    
-class TwiceIntegratedDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, HypoellipticAuxiliaryBridge, TwiceIntegratedBrownianProposal):
-    sname = 'H2IDBr'
-    drift = True
-
-class TwiceIntegratedNoDriftBrownianAuxBridge(MvVanDerMeulenSchauerAuxBridge, HypoellipticAuxiliaryBridge, TwiceIntegratedBrownianProposal):
-    sname = 'H2INDBr'
-    drift = False
-
-# ---------------Hypoelliptic OU Auxiliary Bridge Proposals: 2 Classes ----------------
-
-class IntegratedLLOUAuxBridge(MvVanDerMeulenSchauerAuxBridge, HypoellipticAuxiliaryBridge, IntegratedOUProposal):
-    sname = 'H1IOU'
-    
-class TwiceIntegratedLLOUAuxBridge(MvVanDerMeulenSchauerAuxBridge, HypoellipticAuxiliaryBridge, TwiceIntegratedOUProposal):
-    sname = 'H2INOU'
-
-
-#--------------------------------------------------------------------------------------------------------------------------------------
-
-
-class EndPointProposal(ProbDist):
-    """
-    Base class for end point proposals used in Backward Guided/Backward Reparameterised Feynman-Kac models.
-    """
-    def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
-        self.SDE = sde
-        self.x_start = x_start
-        self.t_start = t_start
-        self.t_end = t_end
-        self.y = y
-        self.LY = LY
-        self.sigmaY = sigmaY
-        self.build_linear_sde()
-
-class LinearEndPointProposal(Normal, EndPointProposal):
-    def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
-        super().__init__(sde, x_start, t_start, t_end, y, LY, sigmaY)
-        pred = MeanAndCov(self.pred_loc, self.pred_cov)
-        opt_prop_loc, opt_prop_cov = filter_step_var_cov(LY, sigmaY ** 2, pred, y)
-        Normal.__init__(self, loc=opt_prop_loc, cov=opt_prop_cov)
-        
-    @property
-    def pred_loc(self):
-        s = self.t_start; t = self.t_end; x_s = self.x_start
-        A = self.LinearSDE._a(s, t); b = self.LinearSDE._b(s, t)
-        return A*x_s + b
-    
-    @property
-    def pred_cov(self):
-        return self.LinearSDE._v(self.t_start, self.t_end)
-
-class MvLinearEndPointProposal(VaryingCovNormal, LinearEndPointProposal):
+class MvLinearEndPointProposal(VaryingCovNormal, LinearEndPointProposalBase):
     """
     End point proposals for backward guided/reparameterised Feynman Kac models 
     that for each input particle, construct a Linear SDE based on Taylor expansion
     of the drift and diffusion coefficients about the input particles.
     """
-
     def __init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY):
-        EndPointProposal.__init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY)
-        pred = MeanAndCov(self.pred_loc, self.pred_cov)        
-        opt_prop_loc, opt_prop_cov = filter_step_var_cov(LY, sigmaY @ sigmaY.T, pred, y) 
-        VaryingCovNormal.__init__(self, loc=opt_prop_loc, cov=opt_prop_cov)
-    
+        LinearEndPointProposalBase.__init__(self, sde, x_start, t_start, t_end, y, LY, sigmaY)
+        VaryingCovNormal.__init__(self, loc=self.opt_prop_loc, cov=self.opt_prop_cov)
+
+    @property
+    def N(self):
+        return self.x_start.shape[0]
+        
     @property
     def pred_loc(self):
         s = self.t_start; t = self.t_end; x_s = self.x_start
         A = self.LinearSDE._a(s, t); b = self._b(s, t)
         mu_x = np.einsum('ijk,ik->ij', A, x_s) + b # (N, dimX, dimX), (N, dimX) -> (N, dimX)
         return mu_x
-    
+
     @property
     def pred_cov(self):
         return self.LinearSDE._v(self.t_start, self.t_end)
-    
-    def ppf(self, u):
-        """Method would be inherited from `Normal' unless overridden."""
-        raise NotImplementedError
 
-# --------------- Elliptic End Point Proposals: 3 Classes ----------------
+    def filter_step_var_cov(self, LY, sigmaY, pred, y):
+        return mv_filter_step_var_cov(LY, sigmaY @ sigmaY.T, pred, y)
 
-class NaiveEndPointProposal(LinearEndPointProposal, EllipticBrownianProposal):
-    sname = 'NDBBrP'
-    any_cov = False
-    drift = False
-    
-class EulerMaruyamaEndPointProposal(LinearEndPointProposal, EllipticBrownianProposal):   
-    sname = 'DBrP'
-    any_cov = True
-    drift = True
+class MvEllipticLinearEndPointProposal(MvLinearEndPointProposal, CheckEllipticSDE):
+    pass    
 
-class OUEndPointProposal(LinearEndPointProposal, EllipticOUProposal):
-    sname = 'OUP'
-    any_cov = True
-    
 # ---------------Multivariate Elliptic End Point Proposals: 4 Classes ----------------
 
-class MvNaiveEndPointProposal(MvLinearEndPointProposal, EllipticBrownianProposal):
+class MvNaiveEndPointProposal(MvEllipticLinearEndPointProposal, BuildBrownianLinearSDE):
     sname='MvNDBBrP'
     any_cov = False
     drift = False
     
-class MvEulerMaruyamaEndPointProposal(MvLinearEndPointProposal, EllipticBrownianProposal):   
+class MvEulerMaruyamaEndPointProposal(MvEllipticLinearEndPointProposal, BuildBrownianLinearSDE):   
     sname='MvDBrP'
     any_cov = True
     full_cov = True
     drift = True
 
-class MvIndepOUEndPointProposal(MvLinearEndPointProposal, EllipticOUProposal):
+class MvIndepOUEndPointProposal(MvEllipticLinearEndPointProposal, BuildOULinearSDE):
     sname='MvIOUP'
     any_cov = True
     full_cov = False
     
-class MvOUEndPointProposal(MvLinearEndPointProposal, EllipticOUProposal):
+class MvOUEndPointProposal(MvEllipticLinearEndPointProposal, BuildOULinearSDE):
     sname='MvOUP'
     any_cov = True
     full_cov = True
+
+# ---------------Hypoelliptic Auxiliary Bridge Proposals:  ----------------
+
+class HypoellipticAuxiliaryBridge(MvAuxiliaryBridge, CheckHypoellipticSDE):
+
+    def transform_X_to_W(self, X, x_start):
+        return ValueError('Transformation from X to W not possible for a hypoelliptic auxiliary bridge.')
+
+class IntegratedAuxiliaryBridge(CheckIntegratedSDE, HypoellipticAuxiliaryBridge):
+    pass
+
+class TwiceIntegratedAuxiliaryBridge(CheckTwiceIntegratedSDE, HypoellipticAuxiliaryBridge):
+    pass
+                
+class IntegratedVanDerMeulenSchauerAuxBridge(IntegratedAuxiliaryBridge, MvVanDerMeulenSchauerAuxBridge):
+    pass
+
+class TwiceIntegratedVanDerMeulenSchauerAuxBridge(TwiceIntegratedAuxiliaryBridge, MvVanDerMeulenSchauerAuxBridge):
+    pass    
+
+# ---------------Hypoelliptic Brownian Auxiliary Bridge Proposals: 4 Classes ----------------
+
+class IntegratedDriftBrownianAuxBridge(IntegratedVanDerMeulenSchauerAuxBridge, BuildBrownianLinearSDE):
+    sname = 'H1IDBr'
+    drift = True
+
+class IntegratedNoDriftBrownianAuxBridge(IntegratedVanDerMeulenSchauerAuxBridge, BuildBrownianLinearSDE):
+    sname = 'H1INDBr'
+    drift = False
     
-# ---------------Hypoelliptic Integrated End Point Proposals: 2 Classes ----------------
+class TwiceIntegratedDriftBrownianAuxBridge(TwiceIntegratedVanDerMeulenSchauerAuxBridge, BuildBrownianLinearSDE):
+    sname = 'H2IDBr'
+    drift = True
+
+class TwiceIntegratedNoDriftBrownianAuxBridge(TwiceIntegratedVanDerMeulenSchauerAuxBridge, BuildBrownianLinearSDE):
+    sname = 'H2INDBr'
+    drift = False
+
+# ---------------Hypoelliptic OU Auxiliary Bridge Proposals: 2 Classes ----------------
+
+class IntegratedLLOUAuxBridge(IntegratedVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
+    sname = 'H1IOU'
     
-class IntegratedDriftBrownianEndPointProposal(MvLinearEndPointProposal, IntegratedBrownianProposal):
+class TwiceIntegratedLLOUAuxBridge(TwiceIntegratedVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
+    sname = 'H2IOU'
+
+
+# ---------------Hypoelliptic End Point Proposals:  ----------------
+
+class HypoellipticLinearEndPointProposal(MvLinearEndPointProposal, CheckHypoellipticSDE):
+    pass
+
+class IntegratedLinearEndPointProposal(CheckIntegratedSDE, HypoellipticLinearEndPointProposal):
+    pass
+
+class TwiceIntegratedLinearEndPointProposal(CheckTwiceIntegratedSDE, HypoellipticLinearEndPointProposal):
+    pass
+
+# ---------------Hypoelliptic Integrated End Point Proposals: 4 Classes ----------------
+
+class IntegratedNaiveEndPointProposal(IntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
+    sname='H1INDBBrP'
+    any_cov = False
+    drift = False
+        
+class IntegratedDriftBrownianEndPointProposal(IntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
     sname='H1IDBrP'
     any_cov = True
     full_cov = True
     drift = True
 
-class IntegratedOUEndPointProposal(MvLinearEndPointProposal, IntegratedOUProposal):
+class IntegratedIndepOUEndPointProposal(IntegratedLinearEndPointProposal, BuildOULinearSDE):
+    sname='H1IIOUP'
+    any_cov = True
+    full_cov = False
+    
+class IntegratedOUEndPointProposal(IntegratedLinearEndPointProposal, BuildOULinearSDE):
     sname='H1IOUP'
     any_cov = True
     full_cov = True
     
-# ---------------Hypoelliptic Twice Integrated End Point Proposals: 2 Classes ----------------
-    
-class TwiceIntegratedDriftBrownianEndPointProposal(MvLinearEndPointProposal, TwiceIntegratedBrownianProposal):
+# ---------------Hypoelliptic Twice Integrated End Point Proposals: 4 Classes ----------------
+
+class TwiceIntegratedNaiveEndPointProposal(TwiceIntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
+    sname='H2INDBBrP'
+    any_cov = False
+    drift = True
+        
+class TwiceIntegratedDriftBrownianEndPointProposal(TwiceIntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
     sname='H2IDBrP'
     any_cov = True
     full_cov = True
     drift = True
 
-class TwiceIntegratedOUEndPointProposal(MvLinearEndPointProposal, TwiceIntegratedBrownianProposal):
+class TwiceIntegratedIndepOUEndPointProposal(TwiceIntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
+    sname='H2IIOUP'
+    any_cov = True
+    full_cov = False
+
+class TwiceIntegratedOUEndPointProposal(TwiceIntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
     sname='H2IOUP'
     any_cov = True
     full_cov = True
@@ -1303,21 +1348,21 @@ class TwiceIntegratedOUEndPointProposal(MvLinearEndPointProposal, TwiceIntegrate
 
 # Forward Proposals
 univ_forward_proposals = [NoDriftBasicBrownianProp, DriftBasicBrownianProp, NoDriftBrownianProp, DriftBrownianProp, LocalLinearBasicOUProp, LocalLinearOUProp]
-mv_forward_proposals = [MvNoDriftBasicBrownianProp, MvDriftBasicBrownianProp, MvNoDriftIndepBrownianProp, MvNoDriftBrownianProp, MvDriftIndepBrownianProp, MvDriftBrownianProp, MvOUProposal, MvIndepOUProposal]
+mv_forward_proposals = [MvNoDriftBasicBrownianProp, MvDriftBasicBrownianProp, MvNoDriftIndepBrownianProp, MvNoDriftBrownianProp, MvDriftIndepBrownianProp, MvDriftBrownianProp, MvBasicOUProposal, MvIndepOUProposal, MvOUProposal]
 integrated_forward_proposals = [] # Not implemented yet.
 twice_integrated_forward_proposals = [] # Not implemented yet.
 
-#Auxiliary Bridges
+# Auxiliary Bridges
 univ_auxiliary_bridges = [DelyonHuAuxBridge,  NoDriftBrownianAuxBridge, DriftBrownianAuxBridge, LocalLinearOUAuxBridge]
 mv_auxiliary_bridges = [MvDelyonHuAuxBridge, MvNoDriftBrownianAuxBridge, MvDriftBrownianAuxBridge, MvLLOUAuxBridge]
 integrated_auxiliary_bridges = [IntegratedDriftBrownianAuxBridge, IntegratedNoDriftBrownianAuxBridge, IntegratedLLOUAuxBridge]
 twice_integrated_auxiliary_bridges = [TwiceIntegratedDriftBrownianAuxBridge, TwiceIntegratedNoDriftBrownianAuxBridge, TwiceIntegratedLLOUAuxBridge]
 
 # End Point Proposals
-univ_end_point_proposals = [NaiveEndPointProposal, EulerMaruyamaEndPointProposal, OUEndPointProposal] 
+univ_end_point_proposals = [NaiveEndPointProposal, EulerMaruyamaEndPointProposal, OUEndPointProposal]
 mv_end_point_proposals = [MvNaiveEndPointProposal, MvEulerMaruyamaEndPointProposal, MvIndepOUEndPointProposal, MvOUEndPointProposal]
-integrated_end_point_proposals = [IntegratedDriftBrownianEndPointProposal, IntegratedOUEndPointProposal]
-twice_integrated_end_point_proposals = [TwiceIntegratedDriftBrownianEndPointProposal, TwiceIntegratedOUEndPointProposal]
+integrated_end_point_proposals = [IntegratedNaiveEndPointProposal, IntegratedDriftBrownianEndPointProposal, IntegratedIndepOUEndPointProposal, IntegratedOUEndPointProposal]
+twice_integrated_end_point_proposals = [TwiceIntegratedNaiveEndPointProposal, TwiceIntegratedDriftBrownianEndPointProposal, TwiceIntegratedIndepOUEndPointProposal, TwiceIntegratedOUEndPointProposal]
  
 """
 Draft code for forward proposals that use the Euler-Maruyama scheme as the proxy for the transition density.
