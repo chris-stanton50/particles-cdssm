@@ -132,7 +132,7 @@ def mv_filter_step_var_cov(G, CovY, pred, yt):
     pred: MeanAndCov object
         filtering distribution at time t    
     """    
-    N = pred.mean.shape[0]; G = np.stack([G]*N); CovY = np.stack([CovY]*N); yt = np.stack([yt]*N) # (N, dimY, dimX), (N, dimY, dimY), (N, dimY)
+    N = pred.mean.shape[0]; G = np.stack([G]*N); CovY = np.stack([CovY]*N); yt = np.concatenate([yt]*N) # (N, dimY, dimX), (N, dimY, dimY), (N, dimY)
     jt_mu_x = pred.mean; jt_cov_x = pred.cov; # (N, dimX), (N, dimX, dimX)
     jt_mu_y = np.einsum('ijk,ik->ij', G, jt_mu_x) # (N, dimY, dimX), (N, dimX) -> (N, dimY)
     jt_cov_xy = np.einsum('ijk,ilk->ijl', jt_cov_x, G) # (N, dimX, dimX), (N, dimY, dimX) -> (N, dimX, dimY)
@@ -351,6 +351,17 @@ def generate_spd_matrix(d):
     
     return spd_matrix
 
+def isNonNegDefinite(A):
+    if not A.ndim == 2:
+        return False
+    if A.shape[0] != A.shape[1]:
+        return False
+    eigenvalues = np.linalg.eigvalsh(A)
+    if np.all(eigenvalues >= 0):
+        return True
+    else:
+        return False
+    
 def mcmc_to_inferencedata(mcmc):
     """
     Converts a particles MCMC object into an ArviZ InferenceData object, including posterior samples,
