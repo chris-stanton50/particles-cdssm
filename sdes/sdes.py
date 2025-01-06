@@ -1,12 +1,36 @@
 # -*- coding: utf-8 -*-
 """
 SDEs module
+
+Implemented classes:
+
+Examples of Univariate SDEs:
+
+1. SinDiffusion: SDE with a sinusoidal drift and constant diffusion
+2. ArctanDiffusion: SDE with an arctan drift and constant diffusion
+3. LogisticDiffusion: SDE with logistic growth and constant diffusion
+
+Examples of LinearSDEs:
+
+1. BrownianMotion: SDE of the Brownian Motion
+2. OrnsteinUhlenbeck: The Ornstein-Uhlenbeck SDE
+3. TVOrnsteinUhlenbeck: Time varying Ornstein Uhlenbeck process
+4. BrownianBridge: Brownian Bridge SDE
+
+Examples of Multivariate LinearSDEs:
+
+1. MvIndependentBrownianMotion: Multivariate Independent Brownian Motion SDE
+2. MvBrownianMotion: Multivariate Brownian Motion SDE
+3. MvOrnsteinUhlenbeck: Multivariate Ornstein-Uhlenbeck SDE
+4. MvIndependentOrnsteinUhlenbeck: Multivariate Independent Ornstein-Uhlenbeck SDE
+5. MvFullOrnsteinUhlenbeck: Multivariate Full Ornstein-Uhlenbeck SDE. Evaluates Matrix exponential.
 """
+
 import math
 import numpy as np
 import scipy.linalg as sla
 from particles.distributions import Normal, VaryingCovNormal, MvNormal
-from sdes.numerical_schemes import EulerMaruyama, LinearExact, MvEulerMaruyama, MvLinearExact
+from sdes.numerical_schemes import EulerMaruyama, LinearExact, MvEulerMaruyama, HypoellipticEulerMaruyama, MvLinearExact
 from sdes.tools import MeanAndCov, filter_step_var_cov, mv_filter_step_var_cov, vectorise_param, grad_log_linear_gaussian, grad_grad_log_linear_gaussian, mv_grad_log_linear_gaussian, mv_grad_grad_log_linear_gaussian
 from sdes.tools import get_methods, vec_grad_log_linear_gaussian
 
@@ -14,9 +38,9 @@ from sdes.tools import get_methods, vec_grad_log_linear_gaussian
 #---------------------------------- Abstract Base Class for Univariate SDEs ----------------------------------
 
 
-class SDE(object):
+class SDEBase(object):
     """
-    Base class for 1D SDEs. To create an SDE, the following methods need to be defined:
+    Base class for all SDEs. To create an SDE, the following methods need to be defined:
 
     b: The drift coefficient
     sigma: The diffusion coefficient
@@ -60,14 +84,14 @@ class SDE(object):
         def sigma(self, x):
             return self.sigma
     """
-    dimX = 1
-    dimW = 1
-    numerical_scheme_cls = EulerMaruyama
-
     def __init__(self, **kwargs):
         if hasattr(self, 'default_params'):
             self.__dict__.update(self.default_params)
         self.__dict__.update(kwargs)
+
+    @property
+    def isLinear(self):
+        return isinstance(self, LinearSDE) or isinstance(self, MvLinearSDE)
 
     @property
     def params(self):
@@ -189,6 +213,12 @@ class SDE(object):
         X = self.numerical_scheme.transform_W_to_X(W, t_start=t_start, x_start=x_start, transform_end_point=True)
         return X
 
+
+class SDE(SDEBase):
+    dimX = 1
+    dimW = 1
+    numerical_scheme_cls = EulerMaruyama
+    
 #---------------------------------- Examples of non-linear, Univariate SDEs ----------------------------------
 
 class SinDiffusion(SDE):
@@ -656,6 +686,18 @@ class OrnsteinUhlenbeck(LinearSDE):
     def _a_vec(self, s, t):
         return np.exp(-self.vec_rho * (t-s))
 
+    def _b(self, s, t):
+        return self.mu * (1. - self._a(s, t))
+
+    def _b_vec(self, s, t):
+        return self.vec_mu *(1. - self._a_vec(s, t))
+    
+    def _v(self, s, t):
+        return ((self.phi ** 2)/(2*self.rho)) * (1 - np.exp(-2*self.rho*(t-s)))
+
+    def _v_vec(self, s, t):
+        return ((self.vec_phi ** 2)/(2*self.vec_rho)) * (1 - np.exp(-2*self.vec_rho*(t-s)))
+
     def _da_drho(self, s, t):
         return -(t-s) * self._a(s, t)
     
@@ -664,13 +706,7 @@ class OrnsteinUhlenbeck(LinearSDE):
     
     def _da_dmu(self, s, t):
         return 0.
-
-    def _b(self, s, t):
-        return self.mu * (1. - self._a(s, t))
-
-    def _b_vec(self, s, t):
-        return self.vec_mu *(1. - self._a_vec(s, t))
-
+    
     def _db_drho(self, s, t):
         return -self.mu * (t-s) * self._a(s, t)
 
@@ -679,13 +715,7 @@ class OrnsteinUhlenbeck(LinearSDE):
     
     def _db_dmu(self, s, t):
         return (1. - self._a(s, t))
-    
-    def _v(self, s, t):
-        return ((self.phi ** 2)/(2*self.rho)) * (1 - np.exp(-2*self.rho*(t-s)))
-
-    def _v_vec(self, s, t):
-        return ((self.vec_phi ** 2)/(2*self.vec_rho)) * (1 - np.exp(-2*self.vec_rho*(t-s)))
-    
+        
     def _dv_drho(self, s, t):
         return ((self.phi ** 2)/(2*self.rho)) * ((2.*((t-s) + (1./(2.*self.rho)))*np.exp(-2.*self.rho*(t-s)))- (1./self.rho))
 
@@ -783,7 +813,7 @@ class BrownianBridge(LinearSDE):
 #---------------------------------- Abstract Base Classes of Multivariate SDEs ----------------------------------
 #---------------------- Includes Base Classes for both the Elliptic and Hypoelliptic Case -----------------------
 
-class MvSDE(SDE):
+class MvSDE(SDEBase):
     """
     Subclass this class to create multivariate SDEs.
 
@@ -815,18 +845,35 @@ class MvSDE(SDE):
         rt_cov_T = np.einsum('ijk->ikj', rt_cov)
         return np.einsum('ijk,ikl->ijl', rt_cov, rt_cov_T)
 
+    @property
+    def dimW(self):
+        return self.dimX // (self.n_smooth + 1)
+
     # def dCov(self, t, x):
     #     # self.sigma(t, x) (N, dimX, dimX)
     #     return np.einsum('ijkl,',self.sigma(t, x), self.dsigma(t, x)) + np.einsum(''self.dsigma(t, x), self.sigma(t, x))
 
 class MvEllipticSDE(MvSDE):
 
+    n_smooth = 0
+    
     @property
     def dimW(self):
         return self.dimX
 
 class HypoellipticSDE(MvSDE):
 
+    """
+    Base class for Hypoelliptic SDEs.
+    
+    In the current package implementation, all Hypoelliptic SDEs are p-1-times integrated SDEs.
+    To build a hypoelliptic SDE, we define the following methods:
+    
+    'b_rough'
+    'sigma_rough'
+    """
+    numerical_scheme_cls = HypoellipticEulerMaruyama
+    
     def __init__(self, **kwargs):
         MvSDE.__init__(self, **kwargs)
         self._check_dims()
@@ -834,44 +881,51 @@ class HypoellipticSDE(MvSDE):
     def _check_dims(self):
         ns_1 = self.n_smooth + 1; dx = self.dimX
         err_str = f'Dimenion of Hypoelliptic Linear SDEs must be divisible by n_smooth + 1: dimX = {dx}, n_smooth+1= {ns_1}'
-        if self.dimX % self.n_smooth + 1 != 0:        
+        if self.dimX % (self.n_smooth + 1) != 0:        
             raise ValueError(err_str)
-        
-    @property
-    def dimW(self):
-        return self.dimX // (self.n_smooth + 1)
-
+    
     @property
     def dimS(self):
         return self.dimX - self.dimW
 
-    def b(self, t, x):
-        """
-        Drift coefficient restricted to the rough component:
-        
-        # Output should be of the form (N, dimW)
-        """
-        return np.concatenate([np.zeros((self.N, self.dimS)), self.b_rough(t, x)], axis=1)
-    
-    def sigma(self, t, x):
-        return np.concatenate([np.zeros((self.N, self.dimS, self.dimX)), self.sigma_rough(t, x)], axis=1)
-
     def b_rough(self, t, x):
         """
-        Diffusion coefficient restricted to the rough component:
+        Drift coefficient restricted to the rough component:
+        may also depend on the smooth component.
         
-        # Output should be of the form (N, dimW, dimW)
+        Used to parameterise integrated Linear SDEs within particle algorithms.
+        Output should be of the form (N, dimW)
         """
-        raise NotImplementedError(self._error_msg('sigma_rough'))
+        raise NotImplementedError(self._error_msg('b_rough'))
+
+    def db_rough(self, t, x):
+        """
+        First derivative of the drift, restricted to the rough component
+        (i.e we take each rough component and evaluate its derivative w.r.t its rough component)
+
+        Output should be of the form (N, dimW, dimW)
+        """
+        raise NotImplementedError(self._error_msg('db_rough'))
     
     def sigma_rough(self, t, x):
         """
         Diffusion coefficient restricted to the rough component:
-        
-        # Output should be of the form (N, dimW, dimW)
+        Output should be of the form (N, dimW, dimW)
         """
         raise NotImplementedError(self._error_msg('sigma_rough'))
+    
+    def b(self, t, x):
+        return np.concatenate([x[:, -self.dimS:], self.b_rough(t, x)], axis=1)
+    
+    def sigma(self, t, x):
+        return np.concatenate([np.zeros((self.N, self.dimS, self.dimX)), self.sigma_rough(t, x)], axis=1)
 
+    def db(self, t, x): # (N, dimX, dimX)
+        raise NotImplementedError(self._error_msg('db'))
+    
+    def dsigma(self, t, x): # (N, dimX, dimW, dimX)
+        raise NotImplementedError(self._error_msg('dsigma'))
+        
     def transform_X_to_W(self, X: np.ndarray, t_start: float, x_start) -> np.ndarray:
         raise ValueError('Not possible to transform from diffusion paths to the driving noise, for hypoelliptic SDEs.')
 
@@ -993,7 +1047,7 @@ class LotkaVolterra(MvEllipticSDE):
 
 #---------------------------------- Abstract Base Classes for Multivariate Elliptic Linear SDEs ----------------------------------
 
-class MvLinearSDE(MvSDE, LinearSDE):
+class MvLinearSDE(MvSDE):
     """
     Multivariate linear SDEs. These objects are used in forward and backward proposals within DA particle filters.
     
@@ -1157,24 +1211,6 @@ class MvLinearSDE(MvSDE, LinearSDE):
         V = L_V_L_T + sigmaY @ sigmaY.T #(N, dimY, dimY)
         return mv_grad_log_linear_gaussian(x_s, y_t, _a, _b, V)
 
-    # def grad_grad_log_py(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: np.ndarray, sigmaY: np.ndarray):
-    #     """
-    #     Gradient of the log transition density of Y_t | X(s), where Y_t | E_t=e_t \sim N(Le_t, \sigma_Y \sigma_Y^T)
-        
-    #     To do: Think about feeding in the Cholesky decomposition instead of the covariance to save compute time.
-    #     # s: float
-    #     # t: float
-    #     # y_t: (1, dimY)
-    #     # LY: (dimY, dimX)
-    #     # sigmaY: (dimY, dimY)
-    #     """
-    #     _a = np.einsum('ij,hjk->hik', LY, self._a(s, t)) #(N, dimY, dimX)
-    #     _b = (LY @ self._b(s, t).T).T #(N, dimY)
-    #     V_L_T = np.einsum('ijk,kl->ijl', self._v(s, t), LY.T) #(N, dimX, dimY)
-    #     L_V_L_T = np.einsum('ij,hjk->hik', LY, V_L_T) #(N, dimY, dimY)
-    #     V = L_V_L_T + sigmaY @ sigmaY.T #(N, dimY, dimY)
-    #     return mv_grad_log_linear_gaussian(x_s, y_t, _a, _b, V)
-
     def _a(self, s, t):
         """
         Should be a (N, dimX, dimX) matrix
@@ -1198,6 +1234,8 @@ class MvLinearSDE(MvSDE, LinearSDE):
         Transition density of the linear SDE, output as a distribution object:
         Object is vectorised over N particles.
         
+        Use in DiscreteDiscreteSSMs for exact bootstrap fk or for the weights in guided fk. 
+        
         Inputs
         ------------
         s: float
@@ -1217,13 +1255,14 @@ class MvLinearSDE(MvSDE, LinearSDE):
     def optimal_proposal_dist(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: np.ndarray, sigmaY: np.ndarray):
         """
         Proposal for the end point using the exact distribution $E_t | E_{t-1}=e_{t-1}, Y_t = y_t$ from a Linear SDE.
-        No longer used in the CDSSM SMC algorithms, but kept for reference.
+        No longer used in the CDSSM SMC algorithms, but used in DiscreteDiscreteSSMs.
                 
         x_s: (N, dimX)
         y_t: (1, dimY)
         LY: (dimY, dimX)
         sigmaY: (dimY, dimY)
-        """        
+        """    
+        A = self._a(s, t); b = self._b(s, t); S = self._v(s,t); CovY = sigmaY @ sigmaY.T    
         N = self.N; dimX = self.dimX
         if x_s.shape != (N, dimX) and N != 1:
             raise ValueError('Input x_s must have shape (N, dimX)')
@@ -1232,7 +1271,6 @@ class MvLinearSDE(MvSDE, LinearSDE):
         if N == 1:
             M = x_s.shape[0]
             A = np.concatenate([A]*M); b = np.concatenate([b]*M); S = np.concatenate([S]*M)
-        A = self._a(s, t); b = self._b(s, t); S = self._v(s,t); CovY = sigmaY @ sigmaY.T
         mu_x = np.einsum('ijk,ik->ij', A, x_s) + b # (N, dimX, dimX), (N, dimX) -> (N, dimX)
         pred = MeanAndCov(mu_x, S)
         opt_prop_loc, opt_prop_cov = mv_filter_step_var_cov(LY, CovY, pred, y_t)
@@ -1329,14 +1367,12 @@ class MvBrownianMotion(MvIndepBrownianMotion):
 
     'm': (N, dimX) drift vector
     's': (N, dimX, dimX) if N>1 else (dimX, dimX) diffusion matrix
-
-    """
-    
+    """    
     @property
     def _diag_cov(self):
         N, dx = self.N, self.dimX
         dummy_x = np.zeros((N, dx))
-        return np.all([np.all(np.isclose(self.Cov(0., dummy_x)[i]-np.diag(np.diag(self.Cov(0., dummy_x))), np.zeroslike(self.Cov(0., dummy_x)))) for i in range(self.N)])
+        return np.all([np.all(np.isclose(self.Cov(0., dummy_x)[i]-np.diag(np.diag(self.Cov(0., dummy_x)[i])), np.zeroslike(self.Cov(0., dummy_x)))) for i in range(self.N)])
 
     @property
     def default_params(self):
@@ -1428,7 +1464,7 @@ class MvIndepOrnsteinUhlenbeck(MvLinearSDE, MvEllipticSDE):
             return (phi ** 2)/(2*rho) * (1 - np.exp(-2*rho*(t-s)))
         return np.stack([np.diag(univ_v(s, t, self.rho[i, :], self.phi[i, :]) )for i in range(self.N)])
 
-class MvOrnsteinUhlenbeck(MvIndepOrnsteinUhlenbeck, MvEllipticSDE):
+class MvOrnsteinUhlenbeck(MvIndepOrnsteinUhlenbeck):
     """
     Multivariate Ornstein-Uhlenbeck process, given by:
     dX_t  = \rho(\mu - X_t) dt + \phi dW_t
@@ -1449,7 +1485,7 @@ class MvOrnsteinUhlenbeck(MvIndepOrnsteinUhlenbeck, MvEllipticSDE):
     def _diag_cov(self):
         N, dx = self.N, self.dimX
         dummy_x = np.zeros((N, dx))
-        return np.all([np.all(np.isclose(self.Cov(0., dummy_x)[i]-np.diag(np.diag(self.Cov(0., dummy_x))), np.zeroslike(self.Cov(0., dummy_x)))) for i in range(self.N)])
+        return np.all([np.all(np.isclose(self.Cov(0., dummy_x)[i]-np.diag(np.diag(self.Cov(0., dummy_x)[i])), np.zeroslike(self.Cov(0., dummy_x)))) for i in range(self.N)])
     
     @property
     def default_params(self):
@@ -1476,7 +1512,7 @@ class MvOrnsteinUhlenbeck(MvIndepOrnsteinUhlenbeck, MvEllipticSDE):
         cov = diff_cov/rho_sums * (1 - np.exp(-2*rho_sums*(t-s))) # (N, dimX, dimX)
         return cov
 
-class MvFullOrnsteinUhlenbeck(MvOrnsteinUhlenbeck, MvEllipticSDE):
+class MvFullOrnsteinUhlenbeck(MvOrnsteinUhlenbeck):
     """
     Multivariate Ornstein-Uhlenbeck process, given by:
     dX_t  = \rho(\mu - X_t) dt + \phi dW_t
@@ -1545,50 +1581,97 @@ class MvFullOrnsteinUhlenbeck(MvOrnsteinUhlenbeck, MvEllipticSDE):
 
 class HypoellipticLinearSDE(MvLinearSDE, HypoellipticSDE):
 
-    def __init__(self, N=1, dimX=2, **kwargs):
+    numerical_scheme_cls = HypoellipticEulerMaruyama
+    
+    def __init__(self, **kwargs):
         MvLinearSDE.__init__(self, **kwargs)
         self._check_dims()
 
+    def A_rough(self, t): # (N, dimW)
+        raise NotImplementedError(self._error_msg('A_rough'))
+    
+    def B_rough(self, t): # (N, dimW, dimW)
+        raise NotImplementedError(self._error_msg('B_rough'))
+    
+    def C_rough(self, t): # (N, dimW, dimW)
+        raise NotImplementedError(self._error_msg('C_rough'))
+
+    def b_rough(self, t, x):
+        """
+        Input (N, dimX)
+        Output (N, dimX)
+        """
+        self._check_input_x(x)
+        M = x.shape[0]; N = self.N
+        A = np.concatenate([self.A_rough(t)]*M, axis=0) if N == 1 else self.A_rough(t)
+        B = np.concatenate([self.B_rough(t)]*M, axis=0) if N == 1 else self.B_rough(t)
+        return A + np.einsum('ijk,ik->ij', B, x[:, -self.dimW:])
+    
+    def sigma_rough(self, t, x):
+        """
+        Input (N, dimX)
+        Output (N, dimX, dimW)
+        """
+        self._check_input_x(x)
+        M = x.shape[0]; N = self.N
+        C = np.concatenate([self.C_rough(t)]*M, axis=0) if N == 1 else self.C_rough(t)
+        return C
+        
+    def db_rough(self, t, x): # (N, dimW, dimW)
+        self._check_input_x(x)
+        M = x.shape[0]; N = self.N
+        db_rough = np.concatenate([self.B_rough(t)]*M, axis=0) if N == 1 else self.B_rough(t)
+        return db_rough
+
     def A(self, t):
         N, ds = self.N, self.dimS
-        return np.concatenate([np.zeros((N, ds)), self.A_rough], axis=1)
+        return np.concatenate([np.zeros((N, ds)), self.A_rough(t)], axis=1)
 
     def B(self, t):
         N, ds, dw = self.N, self.dimS, self.dimW
         B_rows_sm = [None] * self.n_smooth
         for i in range(1, self.n_smooth + 1):
-            B_row_sm = np.concatenate([np.zeros(dw, dw*i), np.eye(dw), np.zeros(dw, dw*(self.n_smooth-i))], axis=1) # (dimW, dimX)
+            B_row_sm = np.concatenate([np.zeros((dw, dw*i)), np.eye(dw), np.zeros((dw, dw*(self.n_smooth-i)))], axis=1) # (dimW, dimX)
             B_rows_sm[i-1] = np.stack([B_row_sm]*N) # (N, dimW, dimX)
-        B_rou = np.concatenate([np.zeros(N, dw, ds), self.B_rough], axis=2) # (N, dimW, dimX)
+        B_rou = np.concatenate([np.zeros((N, dw, ds)), self.B_rough(t)], axis=2) # (N, dimW, dimX)
         B = np.concatenate(B_rows_sm + [B_rou], axis=1) # (N, dimX, dimX)
         return B
 
     def C(self, t):
         N, ds, dw = self.N, self.dimS, self.dimW
-        C = self.C_rough.reshape((N, dw, dw)) if self.N == 1 else self.C_rough
-        C = np.concatenate([np.zeros(N, ds, dw), C], axis=1)
+        C = self.C_rough(t).reshape((N, dw, dw)) if self.N == 1 else self.C_rough(t)
+        C = np.concatenate([np.zeros((N, ds, dw)), C], axis=1)
         return C
 
-    def _a(self, s, t): # (N, dimX, dimX)
+    def _a(self, s, t): # returns (N, dimX, dimX)
+        if hasattr(self, '_a_cached') and self._a_delta_t == t-s:
+            return self._a_cached
         delta_t = t - s; ns_1 = self.n_smooth + 1; N = self.N
-        a_coefs = self.gen_a_coefs(delta_t)
-        _a_block = lambda i, j, n: np.diag(a_coefs[i, j, n, :])
-        _a_blocks = [[np.stack([_a_block(i, j, n) for n in range(N)]) for j in range(ns_1)] for i in range(ns_1)] # (N, dimW, dimW)
+        a_coefs = self.gen_a_coefs(delta_t) # (ns_1, ns_1, N, dw)
+        _a_block = lambda i, j, n: np.diag(a_coefs[i, j, n, :]) # each block is (dw,, dw)
+        _a_blocks = [[np.stack([_a_block(i, j, n) for n in range(N)]) for j in range(ns_1)] for i in range(ns_1)] # list of list (ns_1, ns_1) containing (N, dw, dw) arrays
         _a = np.concatenate([np.concatenate(a_row, axis=2) for a_row in _a_blocks], axis=1) # (N, dimX, dimX)
+        self._a_cached = _a; self._a_delta_t = delta_t        
         return _a
-    
+
     def _b(self, s, t): # (N, dimX)
+        if hasattr(self, '_b_cached') and self._b_delta_t == t-s:
+            return self._b_cached
         delta_t = t - s
         b_coefs = self.gen_b_coefs(delta_t) # (n_smooth + 1, N, dimW)
-        _b = np.stack([b_coefs[i] * self.A_rough for i in range(self.n_smooth + 1)], axis=1) # (N, dimX)
+        _b = np.concatenate([b_coefs[i] * self.A_rough(t) for i in range(self.n_smooth + 1)], axis=1) # (N, dimX)
+        self._b_cached = _b; self._b_delta_t = delta_t
         return _b
 
     def _v(self, s, t): # (N, dimX, dimX)
+        if hasattr(self, '_v_cached') and self._v_delta_t == t-s:
+            return self._v_cached
         delta_t = t - s; ns_1 = self.n_smooth + 1; N = self.N
-        v_coefs = self.gen_v_coefs(delta_t)
-        _v_block = lambda i, j, n: np.diag(v_coefs[i, j, n, :]) @ self.Cov_rough
+        v_coefs = self.gen_v_coefs(delta_t) # (ns_1, ns_1, N, dimW, dimW)
+        _v_block = lambda i, j, n: v_coefs[i, j, n] * self.Cov_rough[n]
         _v_blocks = [[np.stack([_v_block(i, j, n) for n in range(N)]) for j in range(ns_1)] for i in range(ns_1)] # (N, dimW, dimW)
         _v = np.concatenate([np.concatenate(v_row, axis=2) for v_row in _v_blocks], axis=1) # (N, dimX, dimX)
+        self._v_cached = _v; self._v_delta_t = delta_t
         return _v
     
     def _ps(self, n, t):
@@ -1596,10 +1679,6 @@ class HypoellipticLinearSDE(MvLinearSDE, HypoellipticSDE):
         Generates the function t^i/i! for i=0, 1, ..., n-1
         """
         return np.array([1.] + [t / i for i in range(1, n)]).cumprod()
-
-    @property # Redefined for IndepSDEs to speed up computation
-    def Cov_rough(self): # (N, dw, dw)
-        return np.einsum('ijk,ikl->ijl', self.C_rough, self.C_rough)
 
     def transform_X_to_W(self, X, t_start, x_start): # Redefined so that it inherits from HypoellipticSDE.
         return HypoellipticSDE.transform_X_to_W(self, X, t_start, x_start)
@@ -1619,44 +1698,42 @@ class HypoellipticIndepBrownianMotion(HypoellipticLinearSDE):
 
     @property
     def param_shapes(self):
-        N, dw = self.N, self.dimX, self.dimW
+        N, dw = self.N, self.dimW
         return {'m': [(N, dw)], 's': [(N, dw)]}
 
-    @property
-    def A_rough(self):
+    def A_rough(self, t):
         return self.m
 
-    @property
-    def B_rough(self):
+    def B_rough(self, t):
         return np.zeros((self.N, self.dimW, self.dimW))
 
-    @property
-    def C_rough(self):
-        return np.stack([np.diag(self.s[i]) for i in range(self.N)])
+    def C_rough(self, t): # (N, dw, dw)
+        return np.stack([np.diag(self.s[i]) for i in range(self.N)]) 
 
     def gen_a_coefs(self, t):
-        ns_1 = self.n_smooth + 1
+        ns_1 = self.n_smooth + 1 # ns_1
         ps = self._ps(ns_1, t)
         a = lambda i, j: 0. if i > j else ps[j-i]
-        a_coefs = np.array([[a(i, j) for j in range(ns_1)] for i in range(ns_1)]) # (n_smooth + 1, n_smooth + 1)
-        a_coefs = np.stack([a_coefs]*self.N, axis=2) # (n_smooth + 1, n_smooth + 1, N)
-        a_coefs = np.stack([a_coefs]*self.dimW, axis=3) # (n_smooth + 1, n_smooth + 1, N, dimW)
-        return a_coefs # (n_smooth + 1, n_smooth + 1, N, dimW)
+        a_coefs = np.array([[a(i, j) for j in range(ns_1)] for i in range(ns_1)]) # (ns_1, ns_1)
+        a_coefs = np.stack([a_coefs]*self.N, axis=2) # (ns_1, ns_1, N)
+        a_coefs = np.stack([a_coefs]*self.dimW, axis=3) # (ns_1, ns_1, N, dw)
+        return a_coefs # (ns_1, ns_1, N, dw)
 
     def gen_b_coefs(self, t):
-        ps = self._ps(self.n_smooth + 2, t)
-        b_coefs = ps[1:]
-        b_coefs = np.stack([b_coefs]*self.N, axis=2)
-        b_coefs = np.stack([b_coefs]*self.dimW, axis=3)[::-1, :, :]
+        ps = self._ps(self.n_smooth + 2, t) # (ns_1 + 1)
+        b_coefs = ps[1:] # (ns_1)
+        b_coefs = np.stack([b_coefs]*self.N, axis=1) # (ns_1, N)
+        b_coefs = np.stack([b_coefs]*self.dimW, axis=2)[::-1, :, :] # (ns_1, N, dw)
         return b_coefs
-    
+        
     def gen_v_coefs(self, t):
         ns_1 = self.n_smooth + 1
-        ps = self._ps(2*self.n_smooth + 2, t)
-        v = lambda i, j: math.comb(2*ns_1 - i - j, ns_1 - i) * ps[2*ns_1 - i - j + 1]         
+        ps = self._ps(2*self.n_smooth + 2, t) # (2 n_s, )
+        v = lambda i, j: math.comb(2*ns_1 - i - j, ns_1 - i) * ps[2*ns_1 - i - j + 1]
         v_coefs = np.array([[v(i, j) for j in range(1, ns_1+1)] for i in range(1, ns_1+1)])
-        v_coefs = np.stack([v_coefs]*self.N) # (n_smooth +1, n_smooth +1, N)
+        v_coefs = np.stack([v_coefs]*self.N, axis=2) # (n_smooth +1, n_smooth +1, N)
         v_coefs = np.stack([v_coefs]*self.dimW, axis=3) # (n_smooth +1, n_smooth +1, N, dimW)
+        v_coefs = np.stack([v_coefs]*self.dimW, axis=4) # (n_smooth +1, n_smooth +1, N, dimW, dimW)
         return v_coefs
 
     @property
@@ -1683,10 +1760,15 @@ class HypoellipticBrownianMotion(HypoellipticIndepBrownianMotion):
         N, dw = self.N, self.dimW
         return {'m': [(N, dw)], 's': [(N, dw, dw), (dw, dw)]}
     
-    @property
-    def C_rough(self):
+    def C_rough(self, t):
         N, dw = self.N, self.dimW
         return self.s.reshape((N, dw, dw)) if N == 1 else self.s
+
+    @property
+    def Cov_rough(self): # (N, dw, dw)
+        N, dw = self.N, self.dimW
+        s = self.s.reshape((N, dw, dw)) if N == 1 else self.s
+        return np.einsum('ijk,ilk->ijl', s, s)
 
 class HypoellipticIndepOrnsteinUhlenbeck(HypoellipticLinearSDE):
     """
@@ -1708,17 +1790,14 @@ class HypoellipticIndepOrnsteinUhlenbeck(HypoellipticLinearSDE):
         N, dw = self.N, self.dimW
         return {'rho': [(N, dw)], 'mu': [(N, dw)], 'phi': [(N, dw)]}
                         
-    @property
-    def A_rough(self):
+    def A_rough(self, t):
         return self.mu * self.rho
 
-    @property
-    def B_rough(self): # (N, dw, dw)
+    def B_rough(self, t): # (N, dw, dw)
         return np.stack([np.diag(-1.*self.rho[i]) for i in range(self.N)])
 
-    @property
-    def C_rough(self):
-        return np.stack([np.diag(-1.*self.phi[i]) for i in range(self.N)])
+    def C_rough(self, t):
+        return np.stack([np.diag(self.phi[i]) for i in range(self.N)])
 
     def gen_a_coefs(self, t):
         ns_1 = self.n_smooth + 1
@@ -1743,6 +1822,7 @@ class HypoellipticIndepOrnsteinUhlenbeck(HypoellipticLinearSDE):
         for i in range(ns_1):
             for j in range(ns_1):
                 v_coefs[i, j] = gs[self.n_smooth - i, self.n_smooth - j]
+        v_coefs = np.stack([v_coefs]*self.dimW, axis=4) # (n_smooth + 1, n_smooth + 1, N, dimW, dimW)
         return v_coefs
 
     def _qs(self, n, t):
@@ -1756,31 +1836,13 @@ class HypoellipticIndepOrnsteinUhlenbeck(HypoellipticLinearSDE):
         We obtain the following recursion from direct integration:
         q_i(t) = -1/\rho (q_{i-1}(t) + (-t)^{i-1})        
         """
-        rho = self.rho
-        qs = np.zeros((n, self.N, self.dimW))
+        rho = self.rho # (N, dw)
+        ps = self._ps(n-1, t) # (n-1, )
+        qs = np.zeros((n, self.N, self.dimW)) 
         qs[0] = np.exp(-rho*t)
         for i in range(1, n):
-            qs[i] = -1./rho * (qs[i-1] + (-t)**(i-1))
+            qs[i] = 1./rho * (ps[i-1] - qs[i-1]) 
         return qs
-    
-    # def _Is(self, n, t):
-    #     """
-    #     Generates the function I_i(t) for i=0, 1, 2, ..., n-1.
-        
-    #     I_n(t) = exp[-\rho t] t^n/n! dt = q_0(t) * p_n(t) dt: I_n(0) = 0
-    #     Does this for each \rho in the OU process.
-    #     I_0(t) = q_1(t) = 1/rho (1- exp[-\rho t]). 
-        
-    #     We then have recursively:
-    #     I_i(t) = 1/\rho (I_{i-1}(t) - q_{0}(t)*p_{i}(t))
-    #     """
-    #     ps = self._ps(n, t)
-    #     rho = self.rho
-    #     Is = np.zeros((n, self.N, self.dimW))
-    #     Is[0] = 1/rho * (1 - np.exp(-rho*t))
-    #     for i in range(1, n):
-    #         Is[i] = 1./rho * (Is[i-1] - np.exp(-rho*t) * ps[i])
-    #     return Is
     
     def _gs(self, n, t):
         """
@@ -1791,7 +1853,7 @@ class HypoellipticIndepOrnsteinUhlenbeck(HypoellipticLinearSDE):
         g_n,m(t) = q_n(t)q_m(t)dt g_n,m(0) 0
         
         We have the following recursions from integration by parts:
-        g_{n,m}(t) = g_{n-1,m+1}(t) - q_{n}(t)q_{m+1}(t)
+        g_{n,m}(t) = q_{n}(t)q_{m+1}(t) - g_{n-1,m+1}(t)
         g_{n, 0}(t) = 
         
         With initial condition obtained from direct integration:
@@ -1801,11 +1863,11 @@ class HypoellipticIndepOrnsteinUhlenbeck(HypoellipticLinearSDE):
         qs = self._qs(2*n-1, t) # (p, N, dimW)
         rho = self.rho
         gs = np.zeros((2*n-1, 2*n-1, self.N, self.dimW))
-        gs[0, 0] = 1/2.*rho * (1 - np.exp(-2.*rho*t))
+        gs[0, 0] = 1/(2.*rho) * (1 - np.exp(-2.*rho*t))
         for i in range(1, 2*n-1):
-            gs[0, i] = 1./rho * (gs[0, i-1] - np.exp(-rho*t) * qs[i])
+            gs[0, i] = 1./rho * (gs[0, i-1] - qs[0] * qs[i])
             for j in range(i):
-                gs[j+1,  i-j-1] = gs[j, i-j] - qs[j+1] * qs[i-j]
+                gs[j+1,  i-j-1] = qs[j+1] * qs[i-j] - gs[j, i-j]
         return gs[:n, :n, :, :] # (n, n, N, dimW)
 
     @property
@@ -1834,96 +1896,55 @@ class HypoellipticOrnsteinUhlenbeck(HypoellipticIndepOrnsteinUhlenbeck):
         N, dw = self.N, self.dimW
         return {'rho': [(N, dw)], 'mu': [(N, dw)], 'phi': [(N, dw, dw), (dw, dw)]}
 
-    @property
-    def C_rough(self):
+    def C_rough(self, t):
         N, dw = self.N, self.dimW
         return self.phi.reshape((N, dw, dw)) if N == 1 else self.phi
-    
-    def gen_g_coefs(self, n, t):
-        qs = self._qs(2*n-1, t) # (p, N, dimW)
-        rho = self.rho
-        gs = np.zeros((2*n-1, 2*n-1, self.N, self.dimW))
-        gs[0, 0] = 1/2.*rho * (1 - np.exp(-2.*rho*t))
-        for i in range(1, 2*n-1):
-            gs[0, i] = 1./rho * (gs[0, i-1] - np.exp(-rho*t) * qs[i])
-            for j in range(i):
-                gs[j+1,  i-j-1] = gs[j, i-j] - qs[j+1] * qs[i-j]
-        return gs[:n, :n, :, :] # (n, n, N, dimW)
 
-    def _v(self, s, t): # (This has high compute cost)
-        N = self.N; dx = self.dimX; dw = self.dimW; p = self.n_smooth + 1
-        qs = self._qs(2*p-1, t-s) # (2p-1, N, dw)
-        v = np.zeros((N, 2*dx - dw, 2*dx - dw))
-        int_exp_rho = -1/self.rho * np.exp(-self.rho*t) # (N, dimW)
-        self._v_set(self, v, self._gen_g_0_0(t), 0, 0)
-        for l in range(1, 2*p-1):
-            cov_new = self._v_get(v, 0, l-1) - self._int_exp_rho_q_get(qs, int_exp_rho, l) 
-            self._v_set(v, cov_new, 0, l)
-            for k in range(1, l):
-                cov_prev = self._v_get(v, k-1, l-k+1)
-                q_prod = self._q_prod_get(qs, k, l-k+1)
-                cov_new = q_prod - cov_prev
-                self._v_set(v, cov_new, k, l-k)
-        v = v[:, -self.dimX:, -self.dimX:] # (N, dimX, dimX)
-        big_cov = np.concatenate([np.concatenate([self.Cov_rough]*p, axis=2)]*p, axis=1) # (N, dimX, dimX)
-        v = v * big_cov
-        return v
+    @property
+    def Cov_rough(self): # (N, dw, dw)
+        N, dw = self.N, self.dimW
+        phi = self.phi.reshape((N, dw, dw)) if N == 1 else self.phi
+        return np.einsum('ijk,ilk->ijl', phi, phi)    
 
-    def _gen_g_0_0(self, t):
-        dw = self.dimW
-        A_plus_B_T = lambda A, B: A.reshape(dw, 1) + B.reshape(1, dw)
-        rho_sums = np.stack([A_plus_B_T((self.rho[i, :], self.rho[i, :])) for i in range(self.N)]) # (N, dimW, dimW)
-        g_0_0 = 1/rho_sums * (1 - np.exp(-rho_sums * t))
-        return g_0_0
+    def _gs(self, n, t):
+        """
+        Generates the function g_ij(t) for 0 <= i,j <= n-1.
+        So, output is an nxnxdimW array.
+                
+        Where g_n,m(t) is defined as:
+        g_n,m(t) = q_n(t)q_m(t)dt g_n,m(0) 0
         
-    def _v_set(self, v, out, k, l):
+        We have the following recursions from integration by parts:
+        g_{n,m}(t) = g_{n-1,m+1}(t) - q_{n}(t)q_{m+1}(t)
+        g_{n, 0}(t) = 
+        
+        With initial condition obtained from direct integration:
+        
+        g_{0,0}(t) = 1/(2 \rho) (1 - exp[-2\rho t])
         """
-        v: (N, 2*dimX - dimW, 2*dimX - dimW)
-        out: (N, dimW, dimW)
-        k: int 0 <= k <= 2*p - 2
-        l: int 0 <= l <= 2*p - 2
-        """
-        dw = self.dimW
-        c, d = 2*self.dimX - self.dimW, 2*self.dimX - self.dimW
-        a = c - (k+1)*dw; b = d - (l+1)*dw
-        v[:, a:a+dw, b:b+dw] = out
-        return v
-
-    def _v_get(self, v, k, l):
-        """
-        v: (N, 2*dimX - dimW, 2*dimX - dimW)
-        out: (N, dimW, dimW)
-        k: int 0 <= k <= 2*p - 2
-        l: int 0 <= l <= 2*p - 2
-        """        
-        dw = self.dimW
-        c, d = 2*self.dimX - self.dimW, 2*self.dimX - self.dimW
-        a = c - (k+1)*dw; b = d - (l+1)*dw
-        return v[:, a:a+dw, b:b+dw] # (N, dw, dw)
-
-    def _q_prod_get(self, qs, k, l):
-        """
-        qs: (2*p-1, N, dimW)
-        out: (N, dimW, dimW)
-        k: int 0 <= k <= 2*p - 2
-        l: int 0 <= l <= 2*p - 2
-        """
-        dw = self.dimW
+        qs = self._qs(2*n-1, t) # (p, N, dimW)
+        rho = self.rho; dw = self.dimW; N = self.N
         A_dot_B_T = lambda A, B: A.reshape(dw, 1) * B.reshape(1, dw)
-        q_prod = np.stack([A_dot_B_T(qs[k, n, :], qs[l, n, :]) for n in range(self.N)]) # (N, dw, dw)
-        return q_prod
-    
-    def _int_exp_rho_q_get(self, qs, int_exp_rho, l):
-        """
-        qs: (2*p-1, N, dimW)
-        int_exp_rho: (N, dimW)
-        l: int 0 <= l <= 2*p - 2
-        """
-        dw = self.dimW
-        A_dot_B_T = lambda A, B: A.reshape(dw, 1) * B.reshape(1, dw)
-        int_exp_rho_q = np.stack([A_dot_B_T(int_exp_rho[n], qs[l, n, :]) for n in range(self.N)]) # (N, dw, dw)
-        return int_exp_rho_q
+        rho_mat = np.stack([rho]*dw, axis=2) # (N, dw, dw)
+        rho_sums = np.stack([self.rho[i, :].reshape(1, dw) + self.rho[i, :].reshape(dw, 1) for i in range(N)]) # (N, dw, dw)
+        gs = np.zeros((2*n-1, 2*n-1, self.N, self.dimW, self.dimW))
+        gs[0, 0] = 1/rho_sums * (1 - np.exp(-rho_sums*t))
+        for i in range(1, 2*n-1):
+            q_0_q_i = np.stack([A_dot_B_T(qs[0, k, :], qs[i, k, :]) for k in range(N)], axis=0) # (N, dw, dw)
+            gs[0, i] = 1./rho_mat * (gs[0, i-1] - q_0_q_i)
+            for j in range(i):
+                q_prod = np.stack([A_dot_B_T(qs[j+1, k, :], qs[i-j, k, :]) for k in range(N)], axis=0) # (N, dw, dw)
+                gs[j+1,  i-j-1] = q_prod - gs[j, i-j]
+        return gs[:n, :n, :, :, :] # (n, n, N, dimW, dimW)
 
+    def gen_v_coefs(self, t):
+        ns_1 = self.n_smooth + 1
+        gs = self._gs(ns_1, t) # (n_smooth + 1, n_smooth + 1, N, dimW, dimW)
+        v_coefs = np.zeros((ns_1, ns_1, self.N, self.dimW, self.dimW))
+        for i in range(ns_1):
+            for j in range(ns_1):
+                v_coefs[i, j] = gs[self.n_smooth - i, self.n_smooth - j]
+        return v_coefs
 
 #---------------------------------- Example Classes for Multivariate Hypoelliptic Linear SDEs ------------------------
 
@@ -1953,7 +1974,7 @@ class TwiceIntegratedOrnsteinUhlenbeck(HypoellipticOrnsteinUhlenbeck, TwiceInteg
 
 #---------------------------------- Abstract Base class for time-switching SDEs ----------------------------------
 
-class TimeSwitchingSDE(SDE):
+class TimeSwitchingSDE(SDEBase):
     """
     General class for a diffusion process that switches between two possible regimes.
     
@@ -2020,11 +2041,15 @@ class TimeSwitchingSDE(SDE):
     @property
     def dimW(self):
         return self.sde1.dimW
-
+        
     @property
     def _diag_cov(self):
         return True if self.sde1._diag_cov and self.sde2._diag_cov else False
     
+    @property
+    def isLinear(self):
+        return self.sde1.isLinear and self.sde2.isLinear
+
     @property
     def default_params(self):
         sde1_params = {name + '_1': param for name, param in self.sde1.default_params.items()}

@@ -169,10 +169,10 @@ class BootstrapDA(CDSSM_FeynmanKac):
         return 0 if self.data is None else len(self.data)
     
     def M0(self, N):
-        return self.model_sde.simulate(N, self.cdssm.x0, t_start=self.cdssm.s(0), t_end=self.cdssm.s(1), num=self.num)
+        return self.model_sde.simulate(N, self.cdssm.x0, t_start=self.cdssm.S(0), t_end=self.cdssm.S(1), num=self.num)
 
     def M(self, t, xp):
-        return self.model_sde.simulate(xp.shape[0], xp[self.t_end], t_start=self.cdssm.s(t), t_end=self.cdssm.s(t+1), num=self.num)
+        return self.model_sde.simulate(xp.shape[0], xp[self.t_end], t_start=self.cdssm.S(t), t_end=self.cdssm.S(t+1), num=self.num)
 
     def logG(self, t, xp, x):
         return self.cdssm.PY(t, xp, x[self.t_end]).logpdf(self.data[t])
@@ -195,6 +195,8 @@ class BootstrapReparameterisedDA(BootstrapDA):
     
     def __init__(self, cdssm=None, data=None, auxiliary_bridge_cls = None):
         super().__init__(cdssm=cdssm, data=data)
+        if isinstance(self.cdssm.model_sde, HypoellipticSDE):
+            raise ValueError('Bootstrap Reparametered Feynman Kac models cannot be constructed for hypoelliptic SDEs')
         self.auxiliary_bridge_cls = self.default_auxiliary_bridge_cls if auxiliary_bridge_cls is None else auxiliary_bridge_cls
 
     @property
@@ -222,14 +224,14 @@ class BootstrapReparameterisedDA(BootstrapDA):
     def M0(self, N):                            
         X = super().M0(N)
         end_points = X[self.t_end]
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(0), self.cdssm.s(1), end_points)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(0), self.cdssm.S(1), end_points)
         x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
         return self.auxiliary_bridge.transform_X_to_W(X, x_start)
 
     def M(self, t, xp):
         X = super().M(t, xp)
         x_start = xp[self.t_end]; end_points = X[self.t_end]
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), end_points)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), end_points)
         return self.auxiliary_bridge.transform_X_to_W(X, x_start)
 
     def logG(self, t, xp, x):
@@ -243,7 +245,7 @@ class BootstrapReparameterisedDA(BootstrapDA):
         else:
             x_start = xp[self.t_end]
         end_points = x[self.t_end]
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), end_points)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), end_points)
         x = self.auxiliary_bridge.transform_W_to_X(x, x_start)
         log_obs_density = super().logG(t, xp, x)
         return log_obs_density
@@ -258,7 +260,7 @@ class BootstrapReparameterisedDA(BootstrapDA):
         if type(x_start) is not np.ndarray:
             x_start = np.array([x_start])
         x_end = x[self.t_end] if self.dimX == 1 else x[self.t_end].reshape((N, self.dimX))
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), x_end)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), x_end)
         x = self.auxiliary_bridge.transform_W_to_X(x, x_start)
         bridge_log_likelihood = self.auxiliary_bridge.bridge_log_likelihood(x_start, x)
         return bridge_log_likelihood
@@ -272,7 +274,7 @@ class BootstrapReparameterisedDA(BootstrapDA):
         inv_transformed_X = [0] * len(X)
         M = X[0][self.t_end].shape[0]
         for t in range(len(X)):
-            self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), X[t][self.t_end])
+            self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), X[t][self.t_end])
             x_start = np.ones(M)*self.cdssm.x0 if t == 0 else X[t-1][self.t_end]
             inv_transformed_X[t] = self.auxiliary_bridge.transform_W_to_X(X[t], x_start)
         return inv_transformed_X
@@ -285,7 +287,7 @@ class BootstrapReparameterisedDA(BootstrapDA):
         """
         inv_transformed_X = X.copy(); T = X.shape[0]
         for t in range(T):
-            self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), X[t][self.t_end])
+            self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), X[t][self.t_end])
             x_start = np.array([self.cdssm.x0]) if t == 0 else np.array([X[t-1][self.t_end]])
             inv_transformed_X[t] = self.auxiliary_bridge.transform_W_to_X(X[t:t+1], x_start)
         return inv_transformed_X
@@ -339,26 +341,25 @@ class ForwardGuidedDA(BootstrapDA):
         return MvOUProposal if self.dimX > 1 else LocalLinearOUProp
 
     def M0(self, N):                            
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.x0, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.x0, self.cdssm.S(0), self.cdssm.S(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
         return self.proposal_sde.simulate(N, num=self.num)
         
     def M(self, t, xp):
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, xp[self.t_end], self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, xp[self.t_end], self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         return self.proposal_sde.simulate(xp.shape[0], num=self.num)
 
     def logG(self, t, xp, x):
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         # The line above needs to be changed!
         if t == 0:
             N = x[self.t_end].shape[0] 
             x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
         else:
             x_start = xp[self.t_end]
-        self.proposal_sde.build_linear_sde(x_start=x_start)
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         obs_density_logpdf = self.cdssm.PY(t, xp, x[self.t_end]).logpdf(self.data[t])
-        log_girsanov_likelihood = self.proposal_sde.log_girsanov(x_start, x)
+        log_girsanov_likelihood = self.proposal_sde.log_girsanov(x)
         return obs_density_logpdf + log_girsanov_likelihood
-    
+        
 class BackwardGuidedDA(BootstrapDA):
     """
     Guided Backward Proposals
@@ -366,7 +367,7 @@ class BackwardGuidedDA(BootstrapDA):
     cls_sname = 'BwG'
     
     def __init__(self, cdssm=None, data=None, end_pt_proposal_cls=None, auxiliary_bridge_cls=None):
-        super().__init__(cdssm=cdssm, data=data)
+        BootstrapDA.__init__(self, cdssm=cdssm, data=data)
         self.end_pt_proposal_cls = self.default_end_pt_proposal_cls if end_pt_proposal_cls is None else end_pt_proposal_cls
         self.auxiliary_bridge_cls = self.default_auxiliary_bridge_cls if auxiliary_bridge_cls is None else auxiliary_bridge_cls
 
@@ -374,7 +375,9 @@ class BackwardGuidedDA(BootstrapDA):
     def sname(self):
         name = self.cls_sname
         bridge_ext = self.auxiliary_bridge_cls.sname if self.dimX == 1 else self.auxiliary_bridge_cls.sname[2:]
+        bridge_ext = bridge_ext[1:] if isinstance(self.cdssm.model_sde, HypoellipticSDE) else bridge_ext
         end_pt_prop_ext = self.end_pt_proposal_cls.sname if self.dimX == 1 else self.end_pt_proposal_cls.sname[2:]
+        end_pt_prop_ext = end_pt_prop_ext[1:] if isinstance(self.cdssm.model_sde, HypoellipticSDE) else end_pt_prop_ext
         return name + '_' + bridge_ext + '_' + end_pt_prop_ext
 
     @classmethod
@@ -448,30 +451,33 @@ class BackwardGuidedDA(BootstrapDA):
             return DelyonHuAuxBridge
 
     def M0(self, N):
-        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, self.cdssm.x0, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
+        end_point_proposal = self.end_point_proposal(0, self.cdssm.x0)
         end_points = end_point_proposal.rvs(N)
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(0), self.cdssm.s(1), end_points)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(0), self.cdssm.S(1), end_points)
         return self.auxiliary_bridge.simulate(N, self.cdssm.x0, num=self.num)
         
     def M(self, t, xp):
         N = xp[self.t_end].shape[0]
-        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, xp[self.t_end], self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_point_proposal = self.end_point_proposal(t, xp[self.t_end])
         end_points = end_point_proposal.rvs(N)
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), end_points)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), end_points)
         return self.auxiliary_bridge.simulate(N, xp[self.t_end], num=self.num)
 
     def logG(self, t, xp, x):
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), x[self.t_end])
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), x[self.t_end])
         if t == 0:
             N = x[self.t_end].shape[0] 
             x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
         else:
             x_start = xp[self.t_end] 
-        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, x_start, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_point_proposal = self.end_point_proposal(t, x_start)
         end_pt_prop_logpdf = end_point_proposal.logpdf(x[self.t_end])
         obs_density_logpdf = self.cdssm.PY(t, xp, x[self.t_end]).logpdf(self.data[t])
         bridge_log_likelihood = self.auxiliary_bridge.bridge_log_likelihood(x_start, x)
         return obs_density_logpdf + bridge_log_likelihood - end_pt_prop_logpdf
+
+    def end_point_proposal(self, t, x_start):
+        return self.end_pt_proposal_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
 
 class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
     """ Data Augmentation of forward proposals
@@ -500,19 +506,19 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
         return name + '_' + bridge_ext + '_' + fw_prop_ext
 
     def M0(self, N):
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.x0, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, self.cdssm.x0, self.cdssm.S(0), self.cdssm.S(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
         X = self.proposal_sde.simulate(N, num=self.num)
         end_points = X[self.t_end]
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(1) - self.cdssm.s(0), end_points)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.S(1) - self.cdssm.S(0), end_points)
         x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
         return self.auxiliary_bridge.transform_X_to_W(X, x_start)
         
     def M(self, t, xp):
         x_start = xp[self.t_end]; N = xp[self.t_end].shape[0]
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         X = self.proposal_sde.simulate(N, num=self.num)
         end_points = X[self.t_end]
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), end_points)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.S(t+1) - self.cdssm.S(t), end_points)
         return self.auxiliary_bridge.transform_X_to_W(X, x_start)
 
     def logG(self, t, xp, x):
@@ -521,12 +527,12 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
             x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
         else:
             x_start = xp[self.t_end]
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         obs_density_logpdf = self.cdssm.PY(t, xp, x[self.t_end]).logpdf(self.data[t])
         end_points = x[self.t_end]
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), end_points)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.S(t+1) - self.cdssm.S(t), end_points)
         x = self.auxiliary_bridge.transform_W_to_X(x, x_start)
-        log_girsanov_likelihood = self.proposal_sde.log_girsanov(x_start, x)
+        log_girsanov_likelihood = self.proposal_sde.log_girsanov(x)
         return obs_density_logpdf + log_girsanov_likelihood
 
     def logpt(self, t, xp, x):
@@ -540,12 +546,12 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
             x_start = np.array([x_start])
         # N = x_start.shape[0] It shouldn't be necessary to modify the x process.
         # x = np.stack([x]*N)
-        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        self.proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t+1), self.cdssm.S(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         x_end = x[self.t_end] if self.dimX == 1 else x[self.t_end].reshape((N, self.dimX))
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), x_end)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.proposal_sde, 0., self.cdssm.S(t+1) - self.cdssm.S(t), x_end)
         x = self.auxiliary_bridge.transform_W_to_X(x, x_start)
         bridge_log_likelihood = self.auxiliary_bridge.bridge_log_likelihood(x_start, x) # Think about whether this calculation works/ M_t(z_t|z_{t-1})
-        log_girsanov_likelihood = self.proposal_sde.log_girsanov(x_start, x) # G_t(z_{t-1}, z_t))
+        log_girsanov_likelihood = self.proposal_sde.log_girsanov(x) # G_t(z_{t-1}, z_t))
         return bridge_log_likelihood + log_girsanov_likelihood
 
     def samples_transform_W_to_X(self, X):
@@ -558,8 +564,8 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
         M = X[0][self.t_end].shape[0]
         for t in range(len(X)):
             x_start = np.ones(M)*self.cdssm.x0 if t == 0 else X[t-1][self.t_end]            
-            proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-            self.auxiliary_bridge = self.auxiliary_bridge_cls(proposal_sde, 0., self.cdssm.s(t+1) - self.cdssm.s(t), X[t][self.t_end])
+            proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t+1), self.cdssm.S(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+            self.auxiliary_bridge = self.auxiliary_bridge_cls(proposal_sde, 0., self.cdssm.S(t+1) - self.cdssm.S(t), X[t][self.t_end])
             inv_transformed_X[t] = self.auxiliary_bridge.transform_W_to_X(X[t], x_start)
         return inv_transformed_X
 
@@ -572,8 +578,8 @@ class ForwardReparameterisedDA(ForwardGuidedDA, BootstrapReparameterisedDA):
         inv_transformed_X = X.copy(); T = X.shape[0]
         for t in range(T):
             x_start = np.array([self.cdssm.x0]) if t == 0 else np.array([X[t-1][self.t_end]])
-            proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.s(t+1), self.cdssm.s(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
-            self.auxiliary_bridge = self.auxiliary_bridge_cls(proposal_sde, self.cdssm.s(t), self.cdssm.s(t+1), X[t][self.t_end])
+            proposal_sde = self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t+1), self.cdssm.S(t), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+            self.auxiliary_bridge = self.auxiliary_bridge_cls(proposal_sde, self.cdssm.S(t), self.cdssm.S(t+1), X[t][self.t_end])
             inv_transformed_X[t] = self.auxiliary_bridge.transform_W_to_X(X[t:t+1], x_start)
         return inv_transformed_X
     
@@ -583,40 +589,33 @@ class BackwardReparameterisedDA(BackwardGuidedDA, BootstrapReparameterisedDA):
     cls_sname = 'BwR'
     
     def __init__(self, cdssm=None, data=None, end_pt_proposal_cls=None, auxiliary_bridge_cls=None):
-        super().__init__(cdssm=cdssm, data=data, end_pt_proposal_cls=end_pt_proposal_cls, auxiliary_bridge_cls=auxiliary_bridge_cls)
-        self.brownian_motion = MvIndepBrownianMotion(dimX=self.cdssm.model_sde.dimW) if self.dimX > 1 else BrownianMotion()
-
-    @property
-    def sname(self):
-        name = self.cls_sname
-        bridge_ext = self.auxiliary_bridge_cls.sname if self.dimX == 1 else self.auxiliary_bridge_cls.sname[2:]
-        end_pt_prop_ext = self.end_pt_proposal_cls.sname if self.dimX == 1 else self.end_pt_proposal_cls.sname[2:]
-        return name + '_' + bridge_ext + '_' + end_pt_prop_ext
-
+        BackwardGuidedDA.__init__(self, cdssm=cdssm, data=data, end_pt_proposal_cls=end_pt_proposal_cls, auxiliary_bridge_cls=auxiliary_bridge_cls)
+        self.brownian_motion = MvIndepBrownianMotion(dimX=self.cdssm.model_sde.dimX) if self.dimX > 1 else BrownianMotion()
+    
     def M0(self, N):
-        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, self.cdssm.x0, self.cdssm.s(0), self.cdssm.s(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
+        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, self.cdssm.x0, self.cdssm.S(0), self.cdssm.S(1), self.data[0], self.cdssm.LY(0), self.cdssm.sigmaY(0))
         end_points = end_point_proposal.rvs(N)
-        W = self._simulate_W(N, self.cdssm.s(1) - self.cdssm.s(0))
+        W = self._simulate_W(N, self.cdssm.S(1) - self.cdssm.S(0))
         W[self.t_end] = end_points
         return W
 
     def M(self, t, xp):
         N = xp[self.t_end].shape[0]
-        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, xp[self.t_end], self.cdssm.s(t), self.cdssm.s(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, xp[self.t_end], self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
         end_points = end_point_proposal.rvs(N)
-        W = self._simulate_W(N, self.cdssm.s(t+1) - self.cdssm.s(t))
+        W = self._simulate_W(N, self.cdssm.S(t+1) - self.cdssm.S(t))
         W[self.t_end] = end_points                      
         return W
 
     def logG(self, t, xp, x):
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), x[self.t_end])
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), x[self.t_end])
         if t == 0:
             N = x[self.t_end].shape[0] 
             x_start = np.ones(N)*self.cdssm.x0 if self.dimX == 1 else np.concatenate([self.cdssm.x0]*N)
         else:
             x_start = xp[self.t_end]
-        end_point_proposal_dist = self._end_point_proposal_dist(t, x_start)
-        end_pt_prop_logpdf = end_point_proposal_dist.logpdf(x[self.t_end])
+        end_point_proposal = self.end_pt_proposal_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.sigmaY(t))
+        end_pt_prop_logpdf = end_point_proposal.logpdf(x[self.t_end])
         obs_density_logpdf = self.cdssm.PY(t, xp, x[self.t_end]).logpdf(self.data[t])
         # Apply the map from the Weiner measure to the auxiliary bridge:
         x = self.auxiliary_bridge.transform_W_to_X(x, x_start)
@@ -639,19 +638,20 @@ class BackwardReparameterisedDA(BackwardGuidedDA, BootstrapReparameterisedDA):
         # N = x_start.shape[0] It shouldn't be necessary to modify the x process.
         # x = np.stack([x]*N)
         x_end = x[self.t_end] if self.dimX == 1 else x[self.t_end].reshape((N, self.dimX))
-        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.s(t), self.cdssm.s(t+1), x_end)
+        self.auxiliary_bridge = self.auxiliary_bridge_cls(self.model_sde, self.cdssm.S(t), self.cdssm.S(t+1), x_end)
         x = self.auxiliary_bridge.transform_W_to_X(x, x_start)
         bridge_log_likelihood = self.auxiliary_bridge.bridge_log_likelihood(x_start, x)
         return bridge_log_likelihood
 
     def _simulate_W(self, N, t_diff):
-        x_start = np.zeros((N, self.dimW)) if self.dimW > 1 else 0.
+        x_start = np.zeros((N, self.dimX)) if self.dimX > 1 else 0.
         W = self.brownian_motion.simulate(N, x_start, 0., t_diff, num=self.num)
         return W
     
-FK_FILTERING_CLASSES = [BootstrapDA, ForwardGuidedDA, BackwardGuidedDA]
-FK_SMOOTHING_CLASSES = [BootstrapReparameterisedDA, ForwardReparameterisedDA, BackwardReparameterisedDA]
-FK_CLASSES = FK_FILTERING_CLASSES + FK_SMOOTHING_CLASSES
+FK_FILTERING_CLASSES = set([BootstrapDA, ForwardGuidedDA, BackwardGuidedDA])
+FK_SMOOTHING_CLASSES = set([BootstrapReparameterisedDA, ForwardReparameterisedDA, BackwardReparameterisedDA])
+FK_HYPOELLIPTIC_CLASSES = set([BootstrapDA, BackwardGuidedDA, BackwardReparameterisedDA])
+FK_CLASSES = FK_FILTERING_CLASSES.union(FK_SMOOTHING_CLASSES)
 
 def gen_all_fk_models(cdssm, data, smoothing=False):
     """
@@ -661,15 +661,17 @@ def gen_all_fk_models(cdssm, data, smoothing=False):
     all_fk_models = {}
     proposal_kwarg_names = ['auxiliary_bridge_cls', 'proposal_sde_cls', 'end_pt_proposal_cls']
     fk_classes = FK_SMOOTHING_CLASSES if smoothing else FK_CLASSES
+    if isinstance(cdssm.model_sde, HypoellipticSDE):
+        fk_classes = fk_classes.intersection(FK_HYPOELLIPTIC_CLASSES) 
     # Construct all possible Feynman-kac models with the constructions built in the package:
     sde_type_str = sde_type(cdssm.model_sde) + '_'
     for fk_cls in fk_classes:
         fk_models = {}
-        options_dicts =  {name: getattr(fk_cls, sde_type_str + name + '_options')() 
+        options_dicts =  {name: getattr(fk_cls, sde_type_str + name + '_options')()
                         for name in proposal_kwarg_names if hasattr(fk_cls, name + '_options')}
         fk_kwargs = {'cdssm': cdssm, 'data': data}
         fk_models = _gen_fk_models_rec(fk_models, options_dicts, fk_cls, fk_cls.cls_sname, fk_kwargs)
-        all_fk_models.update(fk_models)
+        all_fk_models.update(fk_models) 
     return all_fk_models
         
 def _gen_fk_models_rec(fk_models, options_dicts, curr_fk_cls, curr_fk_name, curr_fk_kwargs):

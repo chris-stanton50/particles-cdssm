@@ -165,7 +165,8 @@ Also implemmented at the start of the file, are utility classes that are used to
 import numpy as np
 import numpy.linalg as nla
 import scipy.stats as stats
-from sdes.sdes import SDE, MvSDE, MvEllipticSDE, HypoellipticSDE, BrownianMotion, OrnsteinUhlenbeck, MvIndepBrownianMotion, MvBrownianMotion, MvIndepOrnsteinUhlenbeck, MvOrnsteinUhlenbeck, TimeSwitchingSDE
+from sdes.numerical_schemes import HypoellipticEulerMaruyama
+from sdes.sdes import SDEBase, SDE, MvSDE, MvEllipticSDE, HypoellipticSDE, BrownianMotion, OrnsteinUhlenbeck, MvIndepBrownianMotion, MvBrownianMotion, MvIndepOrnsteinUhlenbeck, MvOrnsteinUhlenbeck, TimeSwitchingSDE
 from sdes.sdes import HypoellipticSDE, IntegratedSDE, TwiceIntegratedSDE, IntegratedIndepBrownianMotion, IntegratedBrownianMotion, IntegratedIndepOrnsteinUhlenbeck, IntegratedOrnsteinUhlenbeck
 from sdes.sdes import TwiceIntegratedIndepBrownianMotion, TwiceIntegratedBrownianMotion, TwiceIntegratedIndepOrnsteinUhlenbeck, TwiceIntegratedOrnsteinUhlenbeck
 from sdes.path_integrals import log_girsanov, log_delyon_hu, log_van_der_meulen_schauer, mv_log_girsanov, mv_log_delyon_hu, mv_log_van_der_meulen_schauer
@@ -179,7 +180,6 @@ Many of the auxiliary bridge (in particular, the VanDerMeulenSchauerAuxBridge) a
 approximates the true SDE. For forward proposals, this is done by approximating the drift and diffusion coefficients with a Taylor expansion around the starting point.
 
 - For forward proposals, we locally linearlise around the starting point, and for auxiliary bridges, we locally linearlise around the end point.
-
 """
 
 tol=1e-7
@@ -262,57 +262,45 @@ class BuildLinearSDE(object):
         else:
             return func
 
-    def _rough_comp_dec(self, func):
-        if not isinstance(self.SDE, HypoellipticSDE):
-            return func
-        # Possible shapes for MV output: (N, dx, dx), (N, dx), (dx, dx)
-        def rough_comp_func(t, x):
-            dw = self.SDE.dimW; dx = self.SDE.dimX; N = self.N
-            out = func(t, x)
-            if out.shape == (dx, dw): # (dx, dw) -> # (dw, dw)
-                return out[-dw:, :]
-            elif out.shape == (N, dx, dw): # (N, dx, dw) -> # (N, dw, dw)
-                return out[:, -dw:, :]
-            elif out.shape == (N, dx):
-                return out[:, -dw:] # (N, dx) -> # (N, dw)
-            else:
-                return out
-        return rough_comp_func
-
     def _check_dim_dec(self, func):
         if not (self.N == 1 and isinstance(self.SDE, MvSDE)):
             return func
         dw = self.SDE.dimW; dx = self.SDE.dimX; N = self.N
-        def trim_output(t, x):
-            out = func(t, x)
-            return out.reshape(dx, dw) if out.shape == (N, dx, dw) else out                
+        if isinstance(self, MvEllipticSDE):
+            def trim_output(t, x):
+                out = func(t, x)
+                return out.reshape(dx, dw) if out.shape == (N, dx, dw) else out
+        else:
+            def trim_output(t, x):
+                out = func(t, x)
+                return out.reshape(dw, dw) if out.shape == (N, dw, dw) else out
         return trim_output
     
     def get_linearising_functions(self):
         linearising_functions = self._get_linearising_functions()
         # Add any decorators here
-        decorators = [self._check_dim_dec, self._rough_comp_dec, self._sde_tol_dec]
-        for dec in decorators:
+        decorators = [self._check_dim_dec, self._sde_tol_dec]
+        for dec in decorators: # Add all decorators to linearising functions
             linearising_functions = {key: dec(func) for key, func in linearising_functions.items()}
         return linearising_functions
 
     def check_diffusion_param(self, linear_sde_params):
         par = self.diffusion_param_name
         diffusion = linear_sde_params[par]
-        if isinstance(self, ForwardProposal) or isinstance(self, LinearEndPointProposal): 
+        if isinstance(self, ForwardProposalBase) or isinstance(self, LinearEndPointProposalBase): 
             if not self.any_cov:
                 del linear_sde_params[par]
                 return linear_sde_params
-            if isinstance(self, MvForwardProposal) or isinstance(self, MvLinearEndPointProposal) and not self.full_cov:
-                linear_sde_params[par] = self._diffusion_to_diag(diffusion)
+            if (isinstance(self, MvForwardProposal) or isinstance(self, MvLinearEndPointProposal)) and not self.full_cov:
+                linear_sde_params[par] = self._param_to_diag(diffusion)
         if isinstance(self, MvVanDerMeulenSchauerAuxBridge):
             if self._diag_cov:
-                linear_sde_params[par] = self._diffusion_to_diag(diffusion)
+                linear_sde_params[par] = self._param_to_diag(diffusion)
         return linear_sde_params
 
-    def _diffusion_to_diag(self, diffusion):
+    def _param_to_diag(self, param):
         N = self.N
-        return np.stack([np.diag(diffusion[i]) for i in range(N)], axis=0) if N > 1 else np.diag(diffusion).reshape(N, self.dimW)
+        return np.stack([np.diag(param[i]) for i in range(N)], axis=0) if N > 1 else np.diag(param).reshape(N, self.SDE.dimW)
     
     def check_linear_sde_params(self, linear_sde_params):
         return self.check_drift_param(self.check_diffusion_param(linear_sde_params))
@@ -320,10 +308,14 @@ class BuildLinearSDE(object):
     def check_matching_condition(self, linear_sde_params):
         par = self.diffusion_param_name
         if isinstance(self, VanDerMeulenSchauerAuxBridge) or isinstance(self, MvVanDerMeulenSchauerAuxBridge):
-            matching_condition = np.all(np.isclose(self.sigma_x_end, linear_sde_params[par]))
+            if not isinstance(self, HypoellipticAuxiliaryBridge):
+                diff_coef = linear_sde_params[par]
+            else:
+                diff_coef = np.concatenate([np.zeros((self.N, self.dimS, self.dimW)), linear_sde_params[par]], axis=1)
+            matching_condition = np.all(np.isclose(self.sigma_x_end, diff_coef))
             if not matching_condition:
                 raise ValueError('Matching condition for bridge proposal not satisfied.')
-
+                
     def get_linear_sde_params(self):
         t, x = self.get_linearising_points()
         linearising_functions = self.get_linearising_functions()
@@ -336,20 +328,20 @@ class BuildLinearSDE(object):
     
     @property
     def LinearSDECls(self):
-        if not isinstance(self.SDE, MvSDE): # So, must be 
+        if isinstance(self.SDE, SDE):
             return self.UnivLinearSDECls
         if isinstance(self.SDE, MvEllipticSDE):
-            if isinstance(self.SDE, MvEllipticVanDerMeulenSchauerAuxBridge):
+            if isinstance(self, MvEllipticVanDerMeulenSchauerAuxBridge):
                 return self.MvIndepLinearSDECls if self._diag_cov else self.MvLinearSDECls
             else:
-                return self.MvIndepLinearSDECls if not self.full_cov else self.MvLinearSDECls
+                return self.MvIndepLinearSDECls if (not self.any_cov or not self.full_cov) else self.MvLinearSDECls
         if isinstance(self.SDE, IntegratedSDE):
-            if isinstance(IntegratedVanDerMeulenSchauerAuxBridge):
+            if isinstance(self, IntegratedVanDerMeulenSchauerAuxBridge):
                 return self.IntegratedIndepLinearSDECls if self._diag_cov else self.IntegratedLinearSDECls
             else:
-                return self.IntegratedIndepLinearSDECls if not self.full_cov else self.IntegratedLinearSDECls            
+                return self.IntegratedIndepLinearSDECls if (not self.any_cov or not self.full_cov) else self.IntegratedLinearSDECls            
         if isinstance(self.SDE, TwiceIntegratedSDE):
-            if isinstance(TwiceIntegratedVanDerMeulenSchauerAuxBridge):
+            if isinstance(self, TwiceIntegratedVanDerMeulenSchauerAuxBridge):
                 return self.TwiceIntegratedIndepLinearSDECls if self._diag_cov else self.TwiceIntegratedLinearSDECls
             else:
                 return self.TwiceIntegratedIndepLinearSDECls if not self.full_cov else self.TwiceIntegratedLinearSDECls
@@ -370,8 +362,12 @@ class BuildBrownianLinearSDE(BuildLinearSDE):
     diffusion_param_name = 's'
 
     def _get_linearising_functions(self):
-        m_func = self.SDE.b
-        s_func = self.SDE.sigma
+        if not isinstance(self.SDE, HypoellipticSDE):
+            m_func = self.SDE.b
+            s_func = self.SDE.sigma
+        else:
+            m_func = self.SDE.b_rough
+            s_func = self.SDE.sigma_rough
         return {'m': m_func, 's': s_func}
 
     def check_drift_param(self, linear_sde_params):
@@ -395,8 +391,10 @@ class BuildOULinearSDE(BuildLinearSDE):
     def _get_linearising_functions(self):
         if not isinstance(self.SDE, MvSDE):
             return self.get_univ_linearising_functions()
-        else:
+        elif not isinstance(self.SDE, HypoellipticSDE):
             return self.get_mv_linearising_functions()
+        else:
+            return self.get_hypo_linearising_functions()
     
     def get_univ_linearising_functions(self):
         def rho(t, x):
@@ -418,8 +416,18 @@ class BuildOULinearSDE(BuildLinearSDE):
             return self.SDE.sigma(t, x)
         return {'rho': rho, 'mu': mu, 'phi': phi}
     
+    def get_hypo_linearising_functions(self):
+        def rho(t, x):
+            return -1.*self.SDE.db_rough(t, x)
+        def mu(t, x):
+            return nla.solve(-1.*self.SDE.db_rough(t, x), self.SDE.b_rough(t, x) - np.einsum('ijk,ik->ij', self.SDE.db_rough(t, x), x[:, -self.SDE.dimW:]))
+        def phi(t, x):
+            return self.SDE.sigma_rough(t, x)
+        return {'rho': rho, 'mu': mu, 'phi': phi}
+        
     def check_drift_param(self, linear_sde_params):
-        # Do nothing
+        if isinstance(self.SDE, MvSDE):
+            linear_sde_params['rho'] = self._param_to_diag(linear_sde_params['rho'])
         return linear_sde_params
 
 class CheckSDE(object):
@@ -427,18 +435,14 @@ class CheckSDE(object):
     Utility class to add `check_sde method to ForwardProposal, AuxiliaryBridge and EndPointProposal classes.
     """
     def check_sde(self):
-        if not isinstance(self.SDE, SDE):
-            raise ValueError(f'Input SDE is not an instance of an SDE.')
+        if not isinstance(self.SDE, SDEBase):
+            raise ValueError(f'Input SDE is not an instance of an SDE Base.')
         if not isinstance(self.SDE, self.CheckSDECls):
             raise ValueError(f'The underlying SDE must be in class {self.CheckSDECls.__name__} for class {self.__class__.__name__}')
 
 class CheckUnivSDE(CheckSDE):
-    def check_sde(self):
-        if not isinstance(self.SDE, SDE):
-            raise ValueError(f'Input SDE is not an instance of an SDE.')
-        if isinstance(self.SDE, MvSDE):
-            raise ValueError(f'The underlying SDE must not be in class MvSDE for class {self.__class__.__name__}')
-
+    CheckSDECls = SDE
+    
 class CheckEllipticSDE(CheckSDE):
     CheckSDECls = MvEllipticSDE
 
@@ -454,7 +458,7 @@ class CheckTwiceIntegratedSDE(CheckSDE):
 
 # -----------------Univariate Forward Proposals-----------------
 
-class ForwardProposalBase(SDE):
+class ForwardProposalBase(SDEBase):
     """
     Proposal SDE based on the Forward decomposition. Continuous-time likelihood between this proposal and 
     the signal is given by the Girsanov formula.
@@ -497,13 +501,9 @@ class ForwardProposalBase(SDE):
         return super().simulate(size, self.x_start, 0., self.t_diff, num)
 
     def log_girsanov(self, X: np.ndarray):
-        step = float(X.dtype.names[0])
-        X_array = np.stack([self.x_start] + [X[name] for name in X.dtype.names], axis=1) # (N, num+1)
-        b_1 = self._b_time_shifted; b_2 = self._b_2; Cov = self.Cov
-        log_girsanov_wgts = self._log_girsanov(X_array, b_1, b_2, Cov, step)
-        return log_girsanov_wgts
+        raise NotImplementedError(self._error_msg('log_girsanov'))        
 
-class ForwardProposal(ForwardProposalBase, CheckUnivSDE):
+class ForwardProposal(ForwardProposalBase, SDE, CheckUnivSDE):
     """
     Only univariate forward proposals (with dimX=dimW=1) will be instances of this class.
     """
@@ -521,7 +521,15 @@ class ForwardProposal(ForwardProposalBase, CheckUnivSDE):
         return drift
 
     def db(self, t, x):
-        raise NotImplementedError(self._error_msg('db'))
+        """
+        NOT IMPLEMENTED CORRECTLY.
+        This is needed for ForwardGuided/ForwardReparametrised DA, when using a VanDerMeulen and Schauer OU bridge proposal.
+        Thr brige construction is only used in the smoothing, and numerical experiments show that the choice of bridge for the 
+        reparameterisation does not affect the performance of the smoothing algorithms, so this is not a priority. 
+        """
+        # raise NotImplementedError(self._error_msg('db'))
+        db = self.SDE.db(t, x)
+        return db
 
     def b_vec(self, t, x):
         drift = self._b_time_shifted(t, x) 
@@ -534,8 +542,12 @@ class ForwardProposal(ForwardProposalBase, CheckUnivSDE):
     def _b_2(self, t, x):
         return self.b_vec(t, x)
     
-    def _log_girsanov(self, X_array, b_1, b_2, Cov, step):
-        return log_girsanov(X_array, b_1, b_2, Cov, step)
+    def log_girsanov(self, X):        
+        step = float(X.dtype.names[0])
+        X_array = np.stack([self.x_start] + [X[name] for name in X.dtype.names], axis=1) # (N, num+1)
+        b_1 = self._b_time_shifted; b_2 = self._b_2; Cov = self.Cov
+        log_girsanov_wgts = self.log_girsanov(X_array, b_1, b_2, Cov, step)
+        return log_girsanov_wgts    
 
 # -----------------Brownian Univariate Forward Proposals - 4 Classes -----------------
 
@@ -610,7 +622,7 @@ class LocalLinearOUProp(ForwardProposal, BuildOULinearSDE):
 
 # -----------------Univariate Diffusion Bridge Proposals-----------------
 
-class AuxiliaryBridgeBase(SDE):
+class AuxiliaryBridgeBase(object):
     """
     Base class for auxiliary bridges.
 
@@ -636,15 +648,7 @@ class AuxiliaryBridgeBase(SDE):
 
     def _b_vec_time_shifted(self, t, x):
         return self.SDE.b_vec(self.t_start + t, x)
-    
-    def simulate(self, size, x_start, num=5):
-        if size != self.N and self.N > 1:
-            raise ValueError(f'Simulation size {size} should match dimension of end point vector ({self.N}), unless a single end point is specified.')
-        simulation = super().simulate(size, t_start=0., t_end=self.t_diff, x_start=x_start, num=num)
-        end_point = simulation.dtype.names[-1]
-        simulation[end_point] = np.ones(self.N)*self.x_end if type(self.x_end) == float else self.x_end
-        return simulation
-    
+
     def transform_W_to_X(self, W, x_start):
         self._check_end_points_match(W)
         return self.numerical_scheme.transform_W_to_X(W, 0., x_start=x_start, transform_end_point=False)
@@ -658,7 +662,7 @@ class AuxiliaryBridgeBase(SDE):
         if not np.all(np.isclose(X[last_name], self.x_end)):
             raise ValueError('End points of paths do not match end points of auxiliary bridge.')
 
-class AuxiliaryBridge(AuxiliaryBridgeBase, CheckUnivSDE):
+class AuxiliaryBridge(AuxiliaryBridgeBase, SDE, CheckUnivSDE):
     """
     Only univarite auxiliary bridges (with dimX=dimW=1) will be instances of this class.
     """
@@ -669,6 +673,14 @@ class AuxiliaryBridge(AuxiliaryBridgeBase, CheckUnivSDE):
         else:
             return self.x_end.shape[0]
 
+    def simulate(self, size, x_start, num=5):
+        if size != self.N and self.N > 1:
+            raise ValueError(f'Simulation size {size} should match dimension of end point vector ({self.N}), unless a single end point is specified.')
+        simulation = SDE.simulate(self, size, t_start=0., t_end=self.t_diff, x_start=x_start, num=num)
+        end_point = simulation.dtype.names[-1]
+        simulation[end_point] = np.ones(self.N)*self.x_end if type(self.x_end) == float else self.x_end
+        return simulation
+    
 class DelyonHuAuxBridge(AuxiliaryBridge):
     """
     The auxiliary bridge as proposed by Delyon and Hu (2006).
@@ -904,10 +916,14 @@ class MvForwardProposal(ForwardProposalBase, MvSDE):
 
     def db(self, t, x):
         """
-        THIS IMPLEMENTATION IS INCORRECT. NEED TO FIX.
+        NOT IMPLEMENTED CORRECTLY
+        This is needed for ForwardGuided/ForwardReparametrised DA, when using a VanDerMeulen and Schauer OU bridge proposal.
+        Thr brige construction is only used in the smoothing, and numerical experiments show that the choice of bridge for the 
+        reparameterisation does not affect the performance of the smoothing algorithms, so this is not a priority. 
         """
-        # db = self.SDE.db(self.t_start + t, x) # (N, dimX, dimX)
-        raise NotImplementedError('Need to fix this implementation.')
+        db = self.SDE.db(self.t_start + t, x) # (N, dimX, dimX)
+        # raise NotImplementedError('Need to fix this implementation.')
+        return db
 
     def _grad_log_py(self, t, x):
         return self.LinearSDE.grad_log_py(t, self.t_diff, x, self.y, self.LY, self.sigmaY)
@@ -915,10 +931,14 @@ class MvForwardProposal(ForwardProposalBase, MvSDE):
     def _b_2(self, t, x):
         return self.b(t, x)
     
-    def _log_girsanov(self, X_array, b_1, b_2, Cov, step):
-        return mv_log_girsanov(X_array, b_1, b_2, Cov, step)
-
-class MvEllipticForwardProposal(MvForwardProposal, CheckEllipticSDE):
+    def log_girsanov(self, X):
+        step = float(X.dtype.names[0])
+        X_array = np.stack([self.x_start] + [X[name] for name in X.dtype.names], axis=0) # (num+1, N, dimX)
+        b_1 = self._b_time_shifted; b_2 = self.b; Cov = self.Cov
+        log_girsanov_wgts = mv_log_girsanov(X_array, b_1, b_2, Cov, step)
+        return log_girsanov_wgts
+        
+class MvEllipticForwardProposal(MvForwardProposal, MvEllipticSDE, CheckEllipticSDE):
     pass
 
 #----------------- Brownian Multivariate Forward Proposals: 6 Classes-----------------    
@@ -1051,6 +1071,21 @@ class MvAuxiliaryBridge(AuxiliaryBridgeBase, MvSDE):
     def N(self):
         return self.x_end.shape[0]
 
+    def simulate(self, size, x_start, num=5):
+        N = self.N; x_end = self.x_end
+        if N == 1 and size != 1:
+            x_end = np.concatenate([self.x_end]*size, axis=0) # (size, dimX)
+        if size != N and N > 1:
+            raise ValueError(f'Simulation size {size} should match number of end point vectors ({self.N}).')
+        if x_start.shape not in  [(self.N, self.dimX), (1, self.dimX)] and N>1:
+            raise ValueError(f'Starting point array shape {x_start.shape} should be (N, dimX) ({self.N}, {self.dimX}) or (1, dimX) for N>1: N={self.N}.')
+        if x_start.shape == (1, self.dimX) and N > 1:
+            x_start = np.concatenate([x_start]*N)
+        simulation = AuxiliaryBridge.simulate(self, size, x_start=x_start, num=num)
+        end_point = simulation.dtype.names[-1]
+        simulation[end_point] = x_end
+        return simulation
+        
 class MvEllipticAuxiliaryBridge(MvAuxiliaryBridge, CheckEllipticSDE):
     pass
 
@@ -1095,7 +1130,7 @@ class MvVanDerMeulenSchauerAuxBridge(MvAuxiliaryBridge):
     The class of guided bridge proposals based on Linear SDEs:
     """
     def __init__(self, sde, t_start, t_end, x_end):
-        super().__init__(self, sde, t_start, t_end, x_end)
+        super().__init__(sde, t_start, t_end, x_end)
         self.build_linear_sde()
 
     def b(self, t, x):
@@ -1201,11 +1236,15 @@ class MvLinearEndPointProposal(VaryingCovNormal, LinearEndPointProposalBase):
     @property
     def N(self):
         return self.x_start.shape[0]
-        
+
+    @N.setter
+    def N(self, value):
+        pass
+
     @property
     def pred_loc(self):
         s = self.t_start; t = self.t_end; x_s = self.x_start
-        A = self.LinearSDE._a(s, t); b = self._b(s, t)
+        A = self.LinearSDE._a(s, t); b = self.LinearSDE._b(s, t)
         mu_x = np.einsum('ijk,ik->ij', A, x_s) + b # (N, dimX, dimX), (N, dimX) -> (N, dimX)
         return mu_x
 
@@ -1244,7 +1283,13 @@ class MvOUEndPointProposal(MvEllipticLinearEndPointProposal, BuildOULinearSDE):
 
 # ---------------Hypoelliptic Auxiliary Bridge Proposals:  ----------------
 
-class HypoellipticAuxiliaryBridge(MvAuxiliaryBridge, CheckHypoellipticSDE):
+class HypoellipticAuxiliaryBridge(MvAuxiliaryBridge, CheckHypoellipticSDE, HypoellipticSDE):
+
+    numerical_scheme_cls = HypoellipticEulerMaruyama
+    
+    @property
+    def dimS(self):
+        return self.SDE.dimS
 
     def transform_X_to_W(self, X, x_start):
         return ValueError('Transformation from X to W not possible for a hypoelliptic auxiliary bridge.')

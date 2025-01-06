@@ -52,10 +52,10 @@ class DiscreteDiscreteSSM(StateSpaceModel):
         StateSpaceModel.__init__(self, **kwargs)
 
     def PX0(self):
-        return self.cdssm.model_sde.transition_dist(self.cdssm.s(0), self.cdssm.s(1), self.cdssm.x0)
+        return self.cdssm.model_sde.transition_dist(self.cdssm.S(0), self.cdssm.S(1), self.cdssm.x0)
 
     def PX(self, t, xp):
-        return self.cdssm.model_sde.transition_dist(self.cdssm.s(t), self.cdssm.s(t+1), xp)
+        return self.cdssm.model_sde.transition_dist(self.cdssm.S(t), self.cdssm.S(t+1), xp)
 
     def PY(self, t, xp, x):
         return self.cdssm.PY(t, xp, x)
@@ -63,16 +63,16 @@ class DiscreteDiscreteSSM(StateSpaceModel):
     def proposal0(self, data):
         cdssm = self.cdssm
         if hasattr(cdssm.model_sde, 'optimal_proposal_dist'):
-            return cdssm.model_sde.optimal_proposal_dist(cdssm.s(0), cdssm.s(1), cdssm.x0, data[0], cdssm.LY(0), cdssm.sigmaY(0))
+            return cdssm.model_sde.optimal_proposal_dist(cdssm.S(0), cdssm.S(1), cdssm.x0, data[0], cdssm.LY(0), cdssm.sigmaY(0))
         else:
-            return StateSpaceModel.proposal0(self, data) # Not implemented
+            return StateSpaceModel.proposal0(self, data) # Raises not implemented error
 
     def proposal(self, t, xp, data):
         cdssm = self.cdssm
         if hasattr(cdssm.model_sde, 'optimal_proposal_dist'):
-            return cdssm.model_sde.optimal_proposal_dist(cdssm.s(t), cdssm.s(t+1), xp, data[t], cdssm.LY(t), cdssm.sigmaY(t))
-        else: 
-            return StateSpaceModel.proposal(self, data) # Not implemented
+            return cdssm.model_sde.optimal_proposal_dist(cdssm.S(t), cdssm.S(t+1), xp, data[t], cdssm.LY(t), cdssm.sigmaY(t))
+        else:
+            return StateSpaceModel.proposal(self, data) # Raises not implemented error
 
 class MvDiscreteLinearGauss(MVLinearGauss, DiscreteDiscreteSSM):
     r"""Multivariate time homogeneous linear Gaussian model, 
@@ -106,7 +106,7 @@ class MvDiscreteLinearGauss(MVLinearGauss, DiscreteDiscreteSSM):
         # Assign the CDSSM as an attribute to the class
         DiscreteDiscreteSSM.__init__(self, cdssm, **kwargs)
         # Check compatibility of the CDSSM
-        if not isinstance(self.cdssm.model_sde, LinearSDE): #or not isinstance(self.cdssm, GaussianCDSSM):
+        if not self.cdssm.model_sde.isLinear: # Or not a Gaussian CDSSM
             raise ValueError(f"{self.__class__.__name__} only works with Linear SDEs and Gaussian (time-homogeneous) CDSSMs")
         # Extract the parameters of the MVLinearGauss class from the CDSSM
         linear_gauss_params = self.linear_gauss_params()
@@ -117,7 +117,7 @@ class MvDiscreteLinearGauss(MVLinearGauss, DiscreteDiscreteSSM):
         MVLinearGauss.__init__(self, **linear_gauss_params)
 
     def linear_gauss_params(self):
-        s0, s1 = self.cdssm.s(0), self.cdssm.s(1)
+        s0, s1 = self.cdssm.S(0), self.cdssm.S(1)
         F = self.cdssm.model_sde._a(s0, s1)[0]; covX = self.cdssm.model_sde._v(s0, s1)[0] # (dimX, dimX), (dimX, dimX)
         b = self.cdssm.model_sde._b(s0, s1)[0] # (dimX,)
         G = self.cdssm.LY(0) # (dimY, dimX)

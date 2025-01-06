@@ -6,7 +6,7 @@ this package, and represent the models on which we want to conduct statistical i
 import numpy as np
 import numpy.linalg as nla
 from particles.state_space_models import StateSpaceModel
-from particles.kalman import LinearGauss, MVLinearGauss
+from particles.kalman import LinearGauss
 from sdes.state_space_models import DiscreteDiscreteSSM, DiscreteLinearGauss, MvDiscreteLinearGauss
 from sdes.sdes import LinearSDE, OrnsteinUhlenbeck, MvOrnsteinUhlenbeck
 from sdes.numerical_schemes import EulerMaruyama, MvEulerMaruyama
@@ -179,7 +179,7 @@ class CDSSM:
         """
         return self._error_msg(self, "LY")
 
-    def s(self, t):
+    def S(self, t):
         """
         Placeholder for evaluation of the observation times s_t: for now we assume that 
         they are observed at equidistant times. 
@@ -187,10 +187,10 @@ class CDSSM:
         return t * self.delta_s
 
     def _P0_sim(self, size, num=1000):
-        return self.model_sde.simulate(size, self.x0, t_start=self.s(0), t_end=self.s(1), num=num)
+        return self.model_sde.simulate(size, self.x0, t_start=self.S(0), t_end=self.S(1), num=num)
 
     def _PX_sim(self, t, xp, size, num=1000):
-        return self.model_sde.simulate(xp.shape[0], xp[xp.dtype.names[-1]], t_start=self.s(t), t_end=self.s(t+1), num=num)
+        return self.model_sde.simulate(xp.shape[0], xp[xp.dtype.names[-1]], t_start=self.S(t), t_end=self.S(t+1), num=num)
 
     def simulate_given_x(self, x):
         t_end = x[0].dtype.names[-1]
@@ -217,13 +217,7 @@ class CDSSM:
             x.append(self._PX_sim(t, x[-1], size=1, num=num))
         y = self.simulate_given_x(x)
         return x, y
-
-    def discrete_ssm(self):
-        """
-        Returns a state space model that is a proxy for the CDSSM.
-        Only possible when the latent SDE is Linear, so that the transition density is tractable.
-        """
-        return self.discrete_ssm_cls(self) if self.discrete_ssm_cls else None
+    
         
 class GaussianCDSSM(CDSSM):
     """
@@ -266,22 +260,15 @@ class GaussianCDSSM(CDSSM):
     def CovY(self, t):
         return self.covY
     
-    def discrete_ssm(self):
-        """
-        Returns a state space model that is a proxy for the CDSSM.
-        Only possible when the latent SDE is Linear, so that the transition density is tractable.
-        """
-        return super().discrete_ssm()
-       
     def gen_score_add_func(self, param_name):
         gplpx = self.model_sde.grad_param_log_px
         @use_end_point
         def add_func(t, x, xf):
             if t == 0:
-                out = gplpx(self.s(0), self.s(1), self.x0, x, param_name)
-                out += gplpx(self.s(1), self.s(2), x, xf, param_name)
+                out = gplpx(self.S(0), self.S(1), self.x0, x, param_name)
+                out += gplpx(self.S(1), self.S(2), x, xf, param_name)
             else:
-                out = gplpx(self.s(t+1), self.s(t+2), x, xf, param_name)
+                out = gplpx(self.S(t+1), self.S(t+2), x, xf, param_name)
                 return out
         return add_func
 
@@ -304,21 +291,21 @@ class GaussianCDSSM(CDSSM):
         if G.shape[1] != self.dimX:
             raise ValueError("Second dimension of L must match dimension of latent SDE")
 
-    @property
-    def discrete_ssm_cls(self):
-        if isinstance(self.model_sde, LinearSDE):
-            return DiscreteLinearGauss if (self.dimX == 1 and self.dimY == 1) else MvDiscreteLinearGauss
+    def discrete_ssm(self):
+        """
+        Returns a state space model that is a proxy for the CDSSM.
+        Only possible when the latent SDE is Linear, so that the transition density is tractable.
+        """
+        if self.model_sde.isLinear:
+            try: # If the Kalman filter works for the choice latent SDE, then use it: 
+                DiscreteLinearGaussCls = DiscreteLinearGauss if (self.dimX == 1 and self.dimY == 1) else MvDiscreteLinearGauss
+                discrete_ssm = DiscreteLinearGaussCls(self)
+            except ValueError: # Otherwise, give an ssm for which we can at least run particle filters:
+                discrete_ssm = DiscreteDiscreteSSM(self)
+            return discrete_ssm
+        else: # There are edge case where the SDE has non-Gaussian transition density to think about in the future.
+            return None
 
-    @property
-    def discrete_ssm_params(self):
-        params = super().discrete_ssm_params
-        if self.dimX == 1 and self.dimY == 1:
-            params['sigmaY'] = np.sqrt(self.covY).ravel()[0]
-            return params
-        if self.dimX == 1 and self.dimY > 1:
-            raise NotImplementedError("Case dimX == 1 and dimY > 1 not implemented")
-        return params
-    
 class TimeSwitchingGaussianCDSSM(GaussianCDSSM):   
     """
     Not the most helpful CDSSM, but useful for testing purposes.
@@ -354,11 +341,18 @@ class TimeSwitchingGaussianCDSSM(GaussianCDSSM):
     def CovY(self, t):
         t = t+1
         return self.covY_1 if t < self.t_switchY else self.covY_2
-    
-    @property
-    def discrete_ssm_cls(self):
-        return DiscreteDiscreteSSM
-        
+
+    def discrete_ssm(self):
+        """
+        Returns a state space model that is a proxy for the CDSSM.
+        Only possible when the latent SDE is Linear, so that the transition density is tractable.
+        """
+        if self.model_sde.isLinear:
+                discrete_ssm = DiscreteDiscreteSSM(self)
+                return discrete_ssm
+        else: # There are edge case where the SDE has non-Gaussian transition density to think about in the future.
+            return None
+
 
 """
 The following classes are now deprecated
@@ -376,9 +370,9 @@ class OU_CDSSM(GaussianCDSSM):
         a LGSSM. 
         """
         linear_gauss_params = {'sigmaY': self.eta,
-                       'rho': self.model_sde._a(self.s(0), self.s(1)),
-                       'sigmaX': np.sqrt(self.model_sde._v(self.s(0), self.s(1))), # Assume equidistant observations for now
-                       'sigma0': np.sqrt(self.model_sde._v(self.s(0), self.s(1)))
+                       'rho': self.model_sde._a(self.S(0), self.S(1)),
+                       'sigmaX': np.sqrt(self.model_sde._v(self.S(0), self.S(1))), # Assume equidistant observations for now
+                       'sigma0': np.sqrt(self.model_sde._v(self.S(0), self.S(1)))
                       }
         return linear_gauss_params
 
