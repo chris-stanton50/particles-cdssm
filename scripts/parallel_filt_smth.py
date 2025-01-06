@@ -14,13 +14,14 @@ from particles.collectors import Moments
 import particles.state_space_models as ssms
 
 from sdes.smoothing import modif_smoothing_worker
-from sdes.sdes import MvSDE, TS_MvOrnsteinUhlenbeck, MvOrnsteinUhlenbeck, FitzHughNagumo
+from sdes.sdes import MvSDE, TS_MvOrnsteinUhlenbeck, MvOrnsteinUhlenbeck, FitzHughNagumo, IntegratedOrnsteinUhlenbeck, HypoellipticSDE
 from sdes.continuous_discrete_ssms import TimeSwitchingGaussianCDSSM, GaussianCDSSM
 import sdes.feynman_kac as sfk
 from sdes.tools import timed_func
 from sdes.collectors import default_add_funcs, MultiOnline_smooth_ON2, MultiOnline_smooth_naive, MultiOnline_smooth_mcmc
 
 # Process command line arguments
+
 assert sys.argv[1] in ['-os', '-s', '-f'], "Please specify whether you want to run filtering, smoothing or online-smoothing"
 smoothing = True if sys.argv[1] in ['-s', '-os'] else False
 
@@ -28,14 +29,18 @@ short_objective = sys.argv[1]
 objectives_map = {'-f': 'filtering', '-s': 'smoothing', '-os': 'online_smoothing'}
 objective = objectives_map[short_objective]
 
-# objective = 'smoothing'
-# smoothing=True
+# objective = 'filtering'
+# smoothing=False
 # File storage index
-i = 10
+i = 20
 #------------------------------------------------------------------------------------------
 # DEFINE ALL VARIABLES HERE
 # Model Parameters
 # ----------------------- MvOrnsteinUhlenbeck + GaussianCDSSM -----------------------------
+# (Used to test if guided filtering steps are working as intended. This model has a low noise regime,
+# so guiding particles is very important for this case.)
+# (For the smoothing, at T=100, performance of all offline smoothing methods are indistingusihable, 
+# even in the low noise regime.)
 
 # Choose a model SDE:
 sde_cls = MvOrnsteinUhlenbeck
@@ -45,8 +50,14 @@ dimX = 2;
 
 # phi = np.linalg.cholesky(generate_spd_matrix(dimX))
 rho = 0.2*np.ones((1, dimX))
-phi = nla.cholesky(np.array([[1., 0.9,], [0.9, 1.]]))
-phi = 0.3 * phi # Same correlation structure, but smaller variance
+
+if dimX == 2:
+    phi = 0.3 * nla.cholesky(np.array([[1., 0.9,], [0.9, 1.]]))
+if dimX == 4:
+    phi = 0.3 * nla.cholesky(np.array([[1., 0.9, 0.8, 0.5], 
+                                        [0.9, 1., 0.6, 0.4],
+                                        [0.8, 0.6, 1., 0.6],
+                                        [0.5, 0.4, 0.6, 1.]]))
 
 sde_params = {'dimX': dimX,
         'rho': 0.2*np.ones((1, dimX)),
@@ -68,11 +79,9 @@ CovY = np.eye(dimY)*eta_sq if dimY > 1 else eta_sq
 obs_params = {'L': L, 'covY': CovY, 'x0': x0, 'delta_s': delta_s}
     
 # Data simulation parameters
-T=5
-
+T=100
 
 # -----------------------------------------------------------------------------------------
-
 
 # -----------------------------------------------------------------------------------------
 # Algorithm Parameters
@@ -87,7 +96,8 @@ bench_ssm_fk_cls = ssms.GuidedPF
 bench_N_ssm_filt = 1000000
 qmc = True
 
-bench_N_ssm_smth = 1000000 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
+bench_N_ssm_smth = 1000000
+# bench_N_ssm_smth = 1000000 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
 bench_smth_methods = ['FFBS_MCMC']
 
 # Benchmark CDSSM_SMC parameters (used when model sde has unknown transition density)
@@ -99,8 +109,8 @@ cdssm_fk_kwargs = {'auxiliary_bridge_cls': sfk.MvDelyonHuAuxBridge, 'proposal_sd
 bench_N_cdssm_filt = 100
 bench_num_filt = 100 # Reduce bias effect on benmark with large number of imputed points.
 
-bench_N_cdssm_smth = 100000 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
-bench_num_smth = 1000 # Reduce bias effect on benchmark with large number of imputed points.
+bench_N_cdssm_smth = 100 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
+bench_num_smth = 10 # Reduce bias effect on benchmark with large number of imputed points.
 bench_cdssm_smth_methods = ['FFBS_MCMC']
 
 #--------------------------------------------------
@@ -109,14 +119,22 @@ bench_cdssm_smth_methods = ['FFBS_MCMC']
 
 # FK models that for the basis of the cdssm
 # If set to None, then all FK models are used.
+# fk_names = None
 fk_names = ['BsR_DH', 'BwR_OU_OUP', 'BwR_DH_OUP', 'BwR_DH_IOUP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
 
+if issubclass(sde_cls, HypoellipticSDE) and not smoothing:
+    # To test hypoelliptic filtering:
+    fk_names = ['BwG_OU_IOUP', 'BwG_DBr_OUP', 'BwG_NDBr_OUP', 'BwR_OU_OUP', 'BwR_DBr_OUP', 'BwR_NDBr_OUP']
+if issubclass(sde_cls, HypoellipticSDE) and smoothing:
+    # To test hypoelliptic smoothing:
+    fk_names = ['BwR_OU_OUP', 'BwR_DBr_OUP', 'BwR_INDBr_OUP']
+
 # these are used both for filtering and online-smoothing
-N_filt=[100]; num_filt=[10]; nruns_filt=10
+N_filt=[100]; num_filt=[10]; nruns_filt=100
 
 # (Offline) Smoothing parameters
-N_smth=[100]; num_smth=[10]; nruns_smth=10
-methods = ['geneaology', 'FFBS_ON2', 'FFBS_MCMC']
+N_smth=[100]; num_smth=[10]; nruns_smth=100
+methods = ['geneaology', 'FFBS_MCMC']
 
 # Additive functions to store and methods to use for online smoothing
 add_funcs = default_add_funcs
