@@ -1,6 +1,8 @@
 # Particle Based Inference for Continuous-Discrete State Space Models (CD-SSMs) - `particles_cdssm`
 
-This package was initally developed to implement the methods outlined the paper [**Particle Based Inference for Continuous-Discrete State Space Models**](https://arxiv.org/abs/2407.15666v1#). As the project progressed, the code was extended to have an API to make the developed methods more accessible, and the result of this is the `particles_cdssm` package. Please cite this work if using this package in your research:
+A Python package to implement Sequential Monte Carlo methods for inference in Continuous-Discrete State Space Models. Built on top of the `particles` package, can also be used as an alternative to packages for simulation of SDE paths using numerical integrators (such as `sdeint`).    
+
+This project was initally developed to implement the methods outlined the paper [**Particle Based Inference for Continuous-Discrete State Space Models**](https://arxiv.org/abs/2407.15666v1#). As the project progressed, the code was extended to have an API to make the developed methods more accessible to an end user - the end result is this `particles_cdssm` package. Please cite the following work if using these methods for your research:
 
 ```
 @article{stanton2024particle,
@@ -17,7 +19,7 @@ This package provides implementations of numerical methods (namely, Sequential M
 
 ## What are the numerical methods implemented to achieve this?
 
-We use Sequential Monte Carlo methods for inference. This class of methods is now around 25 years old and has established itself as a state-of-the-art approach for inference in State Space Models. For those unfamiliar with this class of methods, we refer to the book-length treatment [An Introdution to Sequential Monte Carlo](https://link.springer.com/book/10.1007/978-3-030-47845-2). A package to implement these methods accompies the book: [particles](https://github.com/nchopin/particles).
+We use Sequential Monte Carlo methods for inference. This class of methods is now around 25 years old and has established itself as a state-of-the-art approach for inference in State Space Models. For those unfamiliar with this class of methods, we refer to the book-length treatment [An Introduction to Sequential Monte Carlo](https://link.springer.com/book/10.1007/978-3-030-47845-2). A package to implement these methods accompanies the book: [particles](https://github.com/nchopin/particles).
 
 ## Why would I want to use SMC methods for inference in CD-SSMs?
 
@@ -28,14 +30,14 @@ There are many real-world applications for which it is natural to use a stochast
 - Neuroscience (e.g Fitzhugh-Nagumo/Duffing-Van-Der-Pol)
 - Finance (Black-Scholes-Merton/Heston/Cox-Ingersoll-Ross)
 
-Furthermore, in these applications, K-step ahead forecasting is often the main goal of the modelling exercise. For example, we might want to predict the population in K years time, or we may want to predict a stock price the next day. The online nature of particle filters makes them ideal for cross-validating forecasting performance of these models. It is much less efficient computationally to attempt this using offline inference methods such as MCMC. Furthermore, generated predictions are inherently probabilistic, so we get uncertainty quantification for free.
+Furthermore, for these applications, K-step ahead forecasting is often the main goal of the modelling exercise. For example, we might want to predict the population in K years time, or we may want to predict a stock price the next day. The online nature of particle filters makes them ideal for cross-validating forecasting performance of these models. It is much less efficient computationally to attempt this using offline inference methods such as MCMC. Furthermore, generated predictions are inherently probabilistic, so we get uncertainty quantification for free.
 
 ## Can I not just use the particles package instead of this one?
 
-There are challenges associated with using SMC methods to conduct inference when the latent states come from a diffusion observed at discrete times: the most problematic one is that the transition denity between the latent states is intractable for all but the simplest of models. This package implements SMC methods that are able to successfully able to overcome this and other issues, using an approach originally forumated in the context of Markov Chain Monte Carlo (MCMC) methods known as **Data Augmentation**. 
+There are challenges associated with using SMC methods to conduct inference when the latent states come from a diffusion observed at discrete times: the most problematic one is that the transition denity between the latent states is intractable for all but the simplest of models. This package implements SMC methods that are able to successfully able to overcome this and other issues, using an approach originally formulated in the context of Markov Chain Monte Carlo (MCMC) methods known as **Data Augmentation**. 
 
 For further details on the issues involved with using SMC for CD-SSMs and how it is possible to implement particle-based methods despite these issues, see the publication that motivated the development of this package [Particle Based Inference for Continuous-Discrete State Space Models](https://arxiv.org/abs/2407.15666v1#) and the references therein.
-
+ 
 ## What SMC algorithms are implemented in this package?
 
 Below is the full list of SMC methods that one can implement for inference in the class of CD-SSMs. Sequential Monte Carlo methods can be used for a broad range of inferential objectives.
@@ -72,13 +74,13 @@ Below is the full list of SMC methods that one can implement for inference in th
 
 - $SMC^2$
 
-That's all for now! Tutorials to introduce you to the API and more formal documentation are on the way!
+That's all for now! Tutorials to introduce you to the API and more formal documentation are on the way! A user that is already familiar with the `particles` package will hopefully find it intuitive.
 
 # Setup Instructions
 
 ### venv
 
-Reproducibility for this repo is managed through a virtual environment. After the cloning the repository, build the virtual environemnt locally through the following commands:
+Reproducibility for this repo is managed through a virtual environment. After the cloning the repository, build the virtual environment locally through the following commands:
 
 (Ensuring that `python` refers to Python 3.11.10 (if not, on Mac brew install python3.11, then use `python3.11` instead)), inside the directory of the cloned repository: 
 
