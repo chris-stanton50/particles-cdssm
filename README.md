@@ -1,4 +1,4 @@
-# particles_cdssm
+# Particle Based Inference for Continuous-Discrete State Space Models (CD-SSMs) - `particles_cdssm`
 
 This package was initally developed to implement the methods outlined the paper [**Particle-Based Methods for Continuous-Discrete State Space Models**](https://arxiv.org/abs/2407.15666v1#). As the project progressed, the code was extended to have an API to make the developed methods more accessible, and the result of this is the `particles_cdssm` package. Please cite this work if using this package in your research:
 
