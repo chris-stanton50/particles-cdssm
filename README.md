@@ -1,6 +1,6 @@
 # Particle Based Inference for Continuous-Discrete State Space Models (CD-SSMs) - `particles_cdssm`
 
-This package was initally developed to implement the methods outlined the paper [**Particle-Based Methods for Continuous-Discrete State Space Models**](https://arxiv.org/abs/2407.15666v1#). As the project progressed, the code was extended to have an API to make the developed methods more accessible, and the result of this is the `particles_cdssm` package. Please cite this work if using this package in your research:
+This package was initally developed to implement the methods outlined the paper [**Particle Based Inference for Continuous-Discrete State Space Models**](https://arxiv.org/abs/2407.15666v1#). As the project progressed, the code was extended to have an API to make the developed methods more accessible, and the result of this is the `particles_cdssm` package. Please cite this work if using this package in your research:
 
 ```
 @article{stanton2024particle,
@@ -17,7 +17,7 @@ This package provides implementations of numerical methods (namely, Sequential M
 
 ## What are the numerical methods implemented to achieve this?
 
-We use Sequential Monte Carlo methods for inference. This class of methods is now around 25 years old and has established itself as a state-of-art approach for inference in State Space Models. For those unfamiliar with this class of methods, we refer to the book-length treatment [An Introdution to Sequential Monte Carlo](https://link.springer.com/book/10.1007/978-3-030-47845-2). A package to implement these methods accompies the book: [particles](https://github.com/nchopin/particles).
+We use Sequential Monte Carlo methods for inference. This class of methods is now around 25 years old and has established itself as a state-of-the-art approach for inference in State Space Models. For those unfamiliar with this class of methods, we refer to the book-length treatment [An Introdution to Sequential Monte Carlo](https://link.springer.com/book/10.1007/978-3-030-47845-2). A package to implement these methods accompies the book: [particles](https://github.com/nchopin/particles).
 
 ## Why would I want to use SMC methods for inference in CD-SSMs?
 
@@ -26,15 +26,15 @@ There are many real-world applications for which it is natural to use a stochast
 - Population Modelling (e.g Malthus/Verhulst)
 - Biosciences (e.g Lotka-Volterra)
 - Neuroscience (e.g Fitzhugh-Nagumo/Duffing-Van-Der-Pol)
-- Finance (Black-Scholes-Merton/Heston)
+- Finance (Black-Scholes-Merton/Heston/Cox-Ingersoll-Ross)
 
 Furthermore, in these applications, K-step ahead forecasting is often the main goal of the modelling exercise. For example, we might want to predict the population in K years time, or we may want to predict a stock price the next day. The online nature of particle filters makes them ideal for cross-validating forecasting performance of these models. It is much less efficient computationally to attempt this using offline inference methods such as MCMC. Furthermore, generated predictions are inherently probabilistic, so we get uncertainty quantification for free.
 
 ## Can I not just use the particles package instead of this one?
 
-There are challenges associated with using SMC methods to conduct inference when the latent state is a diffusion process observed at discrete times: the most probaematic one is that the transition denity between the latent states is intractable for all but the simplest of models. This package implements SMC methods that are able to successfully able to overcome this and other issues, using an approach originally forumated in the context of Markov Chain Monte Carlo (MCMC) methods known as **Data Augmentation**. 
+There are challenges associated with using SMC methods to conduct inference when the latent states come from a diffusion observed at discrete times: the most problematic one is that the transition denity between the latent states is intractable for all but the simplest of models. This package implements SMC methods that are able to successfully able to overcome this and other issues, using an approach originally forumated in the context of Markov Chain Monte Carlo (MCMC) methods known as **Data Augmentation**. 
 
-For further details on the issues involved with using SMC for CD-SSMs and how it is possible to implement the numerical methods despite these issues, see the publication that motivated the developement of this package [Particle-Based Inference for Continuous-Discrete State Space Models](https://arxiv.org/abs/2407.15666v1#) and the references therein.
+For further details on the issues involved with using SMC for CD-SSMs and how it is possible to implement particle-based methods despite these issues, see the publication that motivated the development of this package [Particle Based Inference for Continuous-Discrete State Space Models](https://arxiv.org/abs/2407.15666v1#) and the references therein.
 
 ## What SMC algorithms are implemented in this package?
 
@@ -83,7 +83,7 @@ Reproducibility for this repo is managed through a virtual environment. After th
 (Ensuring that `python` refers to Python 3.11.10 (if not, on Mac brew install python3.11, then use `python3.11` instead)), inside the directory of the cloned repository: 
 
 - Make a folder for the venv: `mkdir venv` (the folder venv is already in the `.gitignore` file)
-- Create the venv `python -m venv ./venv/diffusions`
+- Create the venv `python -m venv ./venv/particles_cdssm`
 - Activate the venv by sourcing the activate script: `source ./venv/diffusions/bin/activate`
 - Upgrade pip in your virtual environment `pip install --upgrade pip`
 - Install all dependencies in the venv `pip install -r requirements.txt`
@@ -97,14 +97,14 @@ To delete the created virtual environment, simply decactivate it then recursivel
 ### Add repo to the Python path
 
 Currently, the repo has not been made into a package using a wheel file. So, after cloning the repository, the location of the repository needs to be added to the python path to import modules from the project:
-To do this, run the following shell command in the terminal, or add the following line to the `.zshrc/.bashrc` file:
+To do this, run the following shell command in the terminal, or add the following line to the `.zshrc` (Mac) or `.bashrc` (Linux) file:
 
- `export PYTHONPATH=$PYTHONPATH:~/location/of/cloned_repository/offline-smoothing-for-diffusions/`
+ `export PYTHONPATH=$PYTHONPATH:~/location/of/cloned_repository/particles-cdssm/`
 
-You are now ready to use the package. Ensure that you have the created `diffusions` virtual environment activated when trying to use the package. It can be activated with the following command from the home directory:
+You are now ready to use the package. Ensure that you have the created `particles-cdssm` virtual environment activated when trying to use the package. It can be activated with the following command from the home directory:
 
-`source ./venv/diffusions/bin/activate`
+`source ./venv/particles-cdssm/bin/activate`
 
 You could alias this for faster activation with the command:
 
-`alias activate_diffusions="source ~/path/from/home/to_repository/offline-smoothing-for-diffusions/venv/diffusions/bin/activate"`
+`alias activate_particles_cdssm="source ~/path/from/home/to_repository/particles-cdssm/venv/diffusions/bin/activate"`
