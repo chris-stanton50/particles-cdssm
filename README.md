@@ -1,11 +1,80 @@
-# Offline Smoothing for Diffusion Processes
+# particles_cdssm
 
-The purpose of this repo is to contain the implementation of PMCMC methods applied to conduct joint Bayesian inference of latent state and parameters of Bayesian stochastic differential equations, that possibly also have jumps, that have been observed with noise.
+This package was initally developed to implement the methods outlined the paper [**Particle-Based Methods for Continuous-Discrete State Space Models**](https://arxiv.org/abs/2407.15666v1#). As the project progressed, the code was extended to have an API to make the developed methods more accessible, and the result of this is the `particles_cdssm` package. Please cite this work if using this package in your research:
 
-We begin by considering the case of a standard Ito SDE without jumps, and then extend to the case where the SDE has jumps.
+```
+@article{stanton2024particle,
+  title={Particle Based Inference for Continuous-Discrete State Space Models},
+  author={Stanton, Christopher and Beskos, Alexandros},
+  journal={arXiv preprint arXiv:2407.15666},
+  year={2024}
+}
+```
 
+## What does this package do?
 
-## Setup Instructions
+This package provides implementations of numerical methods (namely, Sequential Monte Carlo methods) to conduct Bayesian filtering, smoothing and forecasting on a class of models that we call 'Continuous-Discrete State Space models' (CD-SSMs). Loosely speaking, a CD-SSM is a model in which a latent continuous-time process is observed at discrete points in time, with noise. In particular, the continuous-time process that is not observed is the solution of a **Stochastic Differential Equation** (SDE), also known as a diffusion processes.
+
+## What are the numerical methods implemented to achieve this?
+
+We use Sequential Monte Carlo methods for inference. This class of methods is now around 25 years old and has established itself as a state-of-art approach for inference in State Space Models. For those unfamiliar with this class of methods, we refer to the book-length treatment [An Introdution to Sequential Monte Carlo](https://link.springer.com/book/10.1007/978-3-030-47845-2). A package to implement these methods accompies the book: [particles](https://github.com/nchopin/particles).
+
+## Why would I want to use SMC methods for inference in CD-SSMs?
+
+There are many real-world applications for which it is natural to use a stochastic dynamical system as the model: here are a few examples:
+
+- Population Modelling (e.g Malthus/Verhulst)
+- Biosciences (e.g Lotka-Volterra)
+- Neuroscience (e.g Fitzhugh-Nagumo/Duffing-Van-Der-Pol)
+- Finance (Black-Scholes-Merton/Heston)
+
+Furthermore, in these applications, K-step ahead forecasting is often the main goal of the modelling exercise. For example, we might want to predict the population in K years time, or we may want to predict a stock price the next day. The online nature of particle filters makes them ideal for cross-validating forecasting performance of these models. It is much less efficient computationally to attempt this using offline inference methods such as MCMC. Furthermore, generated predictions are inherently probabilistic, so we get uncertainty quantification for free.
+
+## Can I not just use the particles package instead of this one?
+
+There are challenges associated with using SMC methods to conduct inference when the latent state is a diffusion process observed at discrete times: the most probaematic one is that the transition denity between the latent states is intractable for all but the simplest of models. This package implements SMC methods that are able to successfully able to overcome this and other issues, using an approach originally forumated in the context of Markov Chain Monte Carlo (MCMC) methods known as **Data Augmentation**. 
+
+For further details on the issues involved with using SMC for CD-SSMs and how it is possible to implement the numerical methods despite these issues, see the publication that motivated the developement of this package [Particle-Based Inference for Continuous-Discrete State Space Models](https://arxiv.org/abs/2407.15666v1#) and the references therein.
+
+## What SMC algorithms are implemented in this package?
+
+Below is the full list of SMC methods that one can implement for inference in the class of CD-SSMs. Sequential Monte Carlo methods can be used for a broad range of inferential objectives.
+
+## Online Filtering ($X_t | Y_{1:t}=y_{1:t}$)
+
+- Particle Filters
+    - Bootstrap Particle Filter
+    - Guided Particle Filter
+    - Auxiliary Particle Filter
+
+## Offline Smoothing ($X_{1:t} | Y_{1:t}=y_{1:t}$)
+
+- Particle-based smoothers 
+    - FFBS
+    - FFBS-MCMC 
+- Particle MCMC-based smoothers
+    - iCMSC
+    - iCSMC-MCMC
+
+## Online Smoothing for Additive Functionals ($X_{1:t} | Y_{1:t}=y_{1:t}$)
+
+- Forward Additive- $\mathcal{O}(N^2)$
+- Forward Additive-MCMC
+
+## Joint Offline Smoothing ($X_{1:t}, \theta | Y_{1:t}=y_{1:t}$)
+
+- Particle MCMC
+    - Particle Marginal Metropolis Hastings (PMMH)
+    - Particle Gibbs (PG)
+    - Particle Gibbs with Backward Step (PGBS)
+
+## Joint Online Smoothing ($X_{1:t}, \theta | Y_{1:t}=y_{1:t}$)
+
+- $SMC^2$
+
+That's all for now! Tutorials to introduce you to the API and more formal documentation are on the way!
+
+# Setup Instructions
 
 ### venv
 
