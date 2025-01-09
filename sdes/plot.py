@@ -1,4 +1,6 @@
 """
+We use this module to generate visualisations that appear in notebooks for parallel filtering and smoothing. 
+
 We use 3 different types of plot to evaluate the performance of the multiple run particle filter/smoother methods:
 
 1. Boxplots: for moments (across dimension/time, DT plots), log-likelihoods (across time, T plots), and CPU times
@@ -6,10 +8,52 @@ We use 3 different types of plot to evaluate the performance of the multiple run
 3. Effective Sample Size (ESS) plots 
 """
 
+import os
+import dill
 import numpy as np
 import seaborn as sb
 import matplotlib.pyplot as plt
-from particles import SMC
+
+
+# Add plotting functionality for SMC objects
+
+class PlotSMC(object):
+    """
+    Adds plotting functionality to an SMC object.
+    """
+    def plot_ess(self):
+        if not self.summaries:
+            raise ValueError('ESSs not stored. To store ESS, on `collectors` when initialising SMC.')            
+        N = self.N; T = self.fk.T
+        ESSs = self.summaries.ESSs
+        label = self.fk.sname if hasattr(self.fk, 'sname') else self.fk.__class__.__name__.lower()
+        plt.figure()
+        plt.plot(np.arange(1, T+1), ESSs, label=label, linewidth=2)
+        plt.axis([1,T,0,N])
+        plt.xlabel(r'$t$')
+        plt.ylabel('ESS')
+        return plt.gcf(), plt.gca()
+
+class PlotSummaries(object):
+    """
+    We use this class to add methods to the SMC object that allow us to plot the effective sample sizes.
+    """
+    pass
+    
+# Load Results
+#--------------------------------------------------------------------------
+
+def load_results(cdssm_spec_name, objective, N, T, num, n_runs, i):
+    dir_name = '/Users/chris_stanton/Library/CloudStorage/OneDrive-UniversityCollegeLondon/PhD/offline-smoothing-for-diffusions/'
+    dir_name += f'scripts/results_new/{cdssm_spec_name}'
+    os.chdir(dir_name)
+
+    filename = f'{objective}_N={N}_T={T}_num={num}_n_runs={n_runs}_{i}.pkl'
+    # Unpickle (deserialize) the object using dill
+    with open(filename, 'rb') as f:
+        results_dict = dill.load(f)
+    
+    return results_dict
 
 
 # Boxplots

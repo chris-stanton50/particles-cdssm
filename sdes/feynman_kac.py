@@ -71,6 +71,7 @@ from sdes.auxiliary_bridges import LocalLinearOUProp, MvOUProposal
 from sdes.auxiliary_bridges import DelyonHuAuxBridge, MvDelyonHuAuxBridge, IntegratedDriftBrownianAuxBridge, TwiceIntegratedDriftBrownianAuxBridge
 from sdes.auxiliary_bridges import EulerMaruyamaEndPointProposal, MvEulerMaruyamaEndPointProposal, IntegratedDriftBrownianEndPointProposal, TwiceIntegratedDriftBrownianEndPointProposal
 from sdes.collectors import default_add_funcs
+from sdes.plot import PlotSMC # Use to add plotting functionality to SMC objects
 
 class CDSSM_FeynmanKac(FeynmanKac):
     
@@ -115,6 +116,9 @@ class CDSSM_FeynmanKac(FeynmanKac):
     @property
     def add_funcs(self):
         return default_add_funcs # Defined in sdes/collectors.py
+
+class SMC(SMC, PlotSMC):
+    pass
 
 class CDSSM_SMC(SMC):
     def __init__(
