@@ -64,6 +64,7 @@ from sdes.auxiliary_bridges import univ_forward_proposals, univ_auxiliary_bridge
 from sdes.auxiliary_bridges import LocalLinearOUProp, DelyonHuAuxBridge
 from sdes.auxiliary_bridges import MvDelyonHuAuxBridge, MvOUProposal
 from sdes.collectors import default_add_funcs
+from sdes.plot import PlotSMC
 
 class CDSSM_FeynmanKac(FeynmanKac):
     
@@ -107,6 +108,10 @@ class CDSSM_FeynmanKac(FeynmanKac):
     @property
     def add_funcs(self):
         return default_add_funcs # Defined in sdes/collectors.py
+
+
+class SMC(SMC, PlotSMC):
+    pass
 
 class CDSSM_SMC(SMC):
     def __init__(
