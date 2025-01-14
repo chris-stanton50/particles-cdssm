@@ -825,7 +825,7 @@ class LinearEndPointProposalBase(EndPointProposal):
         self.check_sde()
         self.build_linear_sde()
         pred = MeanAndCov(self.pred_loc, self.pred_cov)
-        self.opt_prop_loc, self.opt_prop_cov = self.filter_step_var_cov(LY, sigmaY ** 2, pred, y)
+        self.opt_prop_loc, self.opt_prop_cov = self.filter_step_var_cov(LY, sigmaY, pred, y)
 
     @property
     def dimX(self):
