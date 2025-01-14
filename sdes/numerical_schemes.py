@@ -95,9 +95,7 @@ class MvNumericalScheme(NumericalScheme):
 class EulerMaruyama(NumericalScheme):
 
     def __init__(self, SDE):
-        if SDE.dimX != SDE.dimW:
-            raise ValueError('SDE must be elliptic (dimX = dimW) for Euler-Maruyama scheme')
-        super().__init__(SDE)
+        NumericalScheme.__init__(self, SDE)
 
     def simulation_step(self, size, t, x, step):
         """
@@ -265,11 +263,12 @@ class MvEulerMaruyama(EulerMaruyama, MvNumericalScheme):
 
     @method_match_first_dim
     def _W_to_X_step(self, t, x, w, w_next, step):
-        """       
         """
-        drift = self.SDE.b(t, x) # shape (1/N, d)
-        diffusion = self.SDE.sigma(t, x) # shape (1/N, d, d)  
-        x_next =  x + drift*step + np.einsum('ijk,ik->ij', diffusion, w_next - w)
+        """
+        drift = self.SDE.b(t, x) # shape (1/N, d_x)
+        diffusion = self.SDE.sigma(t, x) # shape (1/N, d_x, d_w)  
+        w_increment = w_next - w
+        x_next =  x + drift*step + np.einsum('ijk,ik->ij', diffusion, w_increment)
         return x_next
 
     @method_match_first_dim
@@ -278,11 +277,21 @@ class MvEulerMaruyama(EulerMaruyama, MvNumericalScheme):
         """
         drift = self.SDE.b(t, x) # shape (1/N, d)
         diffusion = self.SDE.sigma(t, x) # shape (1/N, d, d)  
-        # inv_diff = nla.inv(diffusion) # Talk to Alex about this: this is unstable!
-        # w_next = w + np.einsum('ijk,ik->ij', inv_diff, ((x_next - x) - drift*step))
         w_next = w + nla.solve(diffusion, ((x_next - x) - drift*step))
         return w_next
-        
+
+class HypoellipticEulerMaruyama(MvEulerMaruyama):
+
+    @method_match_first_dim
+    def _W_to_X_step(self, t, x, w, w_next, step):
+        """
+        """
+        drift = self.SDE.b(t, x) # shape (1/N, d_x)
+        diffusion = self.SDE.sigma(t, x) # shape (1/N, d_x, d_w)
+        w_increment = w_next - w  
+        x_next =  x + drift*step + np.einsum('ijk,ik->ij', diffusion, w_increment[:, -self.SDE.dimW:])
+        return x_next
+            
 class MvLinearExact(MvNumericalScheme):
     
     def simulation_step(self, size, t, x, step):

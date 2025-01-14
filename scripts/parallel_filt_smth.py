@@ -13,66 +13,32 @@ from particles.kalman import MVLinearGauss, Kalman
 from particles.collectors import Moments
 import particles.state_space_models as ssms
 
+from sdes.cdssm_lib import CDSSM_LIB
+import sdes.sdes as sdes
 from sdes.smoothing import modif_smoothing_worker
-from sdes.sdes import MvSDE, TS_MvOrnsteinUhlenbeck, MvOrnsteinUhlenbeck, FitzHughNagumo
-from sdes.continuous_discrete_ssms import TimeSwitchingGaussianCDSSM, GaussianCDSSM
 import sdes.feynman_kac as sfk
 from sdes.tools import timed_func
-from sdes.collectors import default_add_funcs, MultiOnline_smooth_ON2, MultiOnline_smooth_naive, MultiOnline_smooth_mcmc
+from sdes.collectors import default_add_funcs, MultiOnline_smooth_naive, MultiOnline_smooth_mcmc
 
 # Process command line arguments
-assert sys.argv[1] in ['-os', '-s', '-f'], "Please specify whether you want to run filtering, smoothing or online-smoothing"
-smoothing = True if sys.argv[1] in ['-s', '-os'] else False
 
-short_objective = sys.argv[1]
+assert sys.argv[1] in list(CDSSM_LIB.keys()), "Please specify an existing CDSSM spec as the first cli"
+cdssm_spec_name = sys.argv[1]
+
+assert sys.argv[2] in ['-os', '-s', '-f'], "Please specify whether you want to run filtering, smoothing or online-smoothing"
+smoothing = True if sys.argv[2] in ['-s', '-os'] else False
+
+short_objective = sys.argv[2]
 objectives_map = {'-f': 'filtering', '-s': 'smoothing', '-os': 'online_smoothing'}
 objective = objectives_map[short_objective]
 
-# objective = 'smoothing'
-# smoothing=True
+# cdssm_spec_name = 'iou'
+# short_objective = '-f'
+# objective = 'filtering'
+# smoothing=False
+
 # File storage index
-i = 10
-#------------------------------------------------------------------------------------------
-# DEFINE ALL VARIABLES HERE
-# Model Parameters
-# ----------------------- MvOrnsteinUhlenbeck + GaussianCDSSM -----------------------------
-
-# Choose a model SDE:
-sde_cls = MvOrnsteinUhlenbeck
-
-# SDE parameters
-dimX = 2; 
-
-# phi = np.linalg.cholesky(generate_spd_matrix(dimX))
-rho = 0.2*np.ones((1, dimX))
-phi = nla.cholesky(np.array([[1., 0.9,], [0.9, 1.]]))
-phi = 0.3 * phi # Same correlation structure, but smaller variance
-
-sde_params = {'dimX': dimX,
-        'rho': 0.2*np.ones((1, dimX)),
-        'mu': np.zeros((1, dimX)),
-        'phi': phi,
-        }
-
-# Choose a CDSSM:
-cdssm_cls = GaussianCDSSM
-
-# We can now define a CDSSM: we observe the latent SDE process at discrete points in time with additive noise:
-
-# CDSSM parameters
-x0 = np.array([0.]*dimX).reshape(1, -1) if dimX > 1 else 0.; delta_s = 1.; 
-dimY = dimX; eta_sq = 0.01 ** 2
-
-L = np.eye(dimY) if (dimY > 1 or dimX > 1) else 1. 
-CovY = np.eye(dimY)*eta_sq if dimY > 1 else eta_sq
-obs_params = {'L': L, 'covY': CovY, 'x0': x0, 'delta_s': delta_s}
-    
-# Data simulation parameters
-T=5
-
-
-# -----------------------------------------------------------------------------------------
-
+i = 20
 
 # -----------------------------------------------------------------------------------------
 # Algorithm Parameters
@@ -87,7 +53,8 @@ bench_ssm_fk_cls = ssms.GuidedPF
 bench_N_ssm_filt = 1000000
 qmc = True
 
-bench_N_ssm_smth = 1000000 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
+bench_N_ssm_smth = 1000000
+# bench_N_ssm_smth = 1000000 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
 bench_smth_methods = ['FFBS_MCMC']
 
 # Benchmark CDSSM_SMC parameters (used when model sde has unknown transition density)
@@ -96,32 +63,42 @@ bench_smth_methods = ['FFBS_MCMC']
 bench_cdssm_fk_cls = sfk.ForwardReparameterisedDA
 cdssm_fk_kwargs = {'auxiliary_bridge_cls': sfk.MvDelyonHuAuxBridge, 'proposal_sde_cls': sfk.MvOUProposal}
 
-bench_N_cdssm_filt = 100
-bench_num_filt = 100 # Reduce bias effect on benmark with large number of imputed points.
+bench_N_cdssm_filt = 1000000
+bench_num_filt = 10 # Reduce bias effect on benmark with large number of imputed points.
 
-bench_N_cdssm_smth = 100000 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
-bench_num_smth = 1000 # Reduce bias effect on benchmark with large number of imputed points.
+bench_N_cdssm_smth = 1000000 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
+bench_num_smth = 10 # Reduce bias effect on benchmark with large number of imputed points.
 bench_cdssm_smth_methods = ['FFBS_MCMC']
 
-#--------------------------------------------------
-
-# Multi SMC/CDSSM SMC parameters
-
-# FK models that for the basis of the cdssm
-# If set to None, then all FK models are used.
-fk_names = ['BsR_DH', 'BwR_OU_OUP', 'BwR_DH_OUP', 'BwR_DH_IOUP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
+#---------------------Multi SMC/CDSSM SMC parameters-------------
 
 # these are used both for filtering and online-smoothing
-N_filt=[100]; num_filt=[10]; nruns_filt=10
+N_filt=[100]; num_filt=[10]; nruns_filt=100
 
 # (Offline) Smoothing parameters
-N_smth=[100]; num_smth=[10]; nruns_smth=10
-methods = ['geneaology', 'FFBS_ON2', 'FFBS_MCMC']
+N_smth=[100]; num_smth=[10]; nruns_smth=100
+methods = ['geneaology', 'FFBS_MCMC']
 
 # Additive functions to store and methods to use for online smoothing
 add_funcs = default_add_funcs
 # online_smoothing_collectors = [MultiOnline_smooth_naive, MultiOnline_smooth_ON2, MultiOnline_smooth_mcmc]
 online_smoothing_collectors = [MultiOnline_smooth_naive, MultiOnline_smooth_mcmc]
+
+# FK models that for the basis of the cdssm
+
+# If set to None, then all FK models are used.
+# fk_names = None
+sde_cls = CDSSM_LIB[cdssm_spec_name]['sde_cls']
+if issubclass(sde_cls, sdes.HypoellipticSDE) and not smoothing:
+    # To test hypoelliptic filtering:
+    fk_names = ['BootstrapDA', 'BwG_OU_IOUP', 'BwG_DBr_OUP', 'BwG_NDBr_OUP', 'BwR_OU_OUP', 'BwR_DBr_OUP', 'BwR_NDBr_OUP']
+if issubclass(sde_cls, sdes.HypoellipticSDE) and smoothing:
+    # To test hypoelliptic smoothing:
+    fk_names = ['BwR_OU_OUP', 'BwR_DBr_OUP', 'BwR_INDBr_OUP']
+
+if not issubclass(sde_cls, sdes.HypoellipticSDE):
+    # To test elliptic filtering and smoothing:    
+    fk_names = ['BsR_DH', 'BwR_OU_OUP', 'BwR_DH_OUP', 'BwR_DH_IOUP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
 
 # ------------------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------------------
@@ -159,7 +136,11 @@ def run_benchmark():
 def run_kalman_benchmark():
     print('Running benchmark Kalman filter')
     benchmark_kalman = Kalman(ssm=discrete_ssm, data=y)
-    _, filt_time = timed_func(benchmark_kalman.filter)()
+    try:
+        _, filt_time = timed_func(benchmark_kalman.filter)()
+    except ValueError:
+        print('Kalman filter failed. Returning None.')
+        return None
     print(f'Done. Kalman filter run time: {round(filt_time, 6)}')
     print(f'Running benchmark RTS smoother')
     _, smth_time = timed_func(benchmark_kalman.smoother)()
@@ -238,8 +219,8 @@ def store_results():
     N = N_filt if objective != 'smoothing' else N_smth
     num = num_filt if objective != 'smoothing' else num_smth
     nruns = nruns_filt if objective != 'smoothing' else nruns_smth
-    filename = f'results_N={N}_T={T}_num={num}_n_runs={nruns}_{i}.pkl'
-    os.chdir(f'./results/{objective}/{cdssm_cls.__name__}/{cdssm.model_sde.__class__.__name__}/')
+    filename = f'{short_objective[1:]}_N={N}_T={T}_num={num}_n_runs={nruns}_{i}.pkl'
+    os.chdir(f'./results_new/{cdssm_spec_name}/')
 
     # Pickle (serialize) the object using dill
     t1 = time.perf_counter()
@@ -263,12 +244,21 @@ def load_results(cdssm_name, sde_name, N, T, num, n_runs, i, objective):
         
 #------------------------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------------------------
-    
+
+cdssm_spec = CDSSM_LIB[cdssm_spec_name]
+
+# Extract obejects from the CDSSM Spec:
+sde_cls = cdssm_spec['sde_cls']
+cdssm_cls = cdssm_spec['cdssm_cls']
+sde_params = cdssm_spec['sde_params']
+cdssm_params = cdssm_spec['cdssm_params']
+T = cdssm_spec['default_T']
+
 # We define the underlying SDE:
 sde = sde_cls(**sde_params)
 
 # We define the CDSSM:
-cdssm = cdssm_cls(sde, **obs_params)
+cdssm = cdssm_cls(sde, **cdssm_params)
 
 # We generate some synthetic data from the process:
 np.random.seed(34953)
