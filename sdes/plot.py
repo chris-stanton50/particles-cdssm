@@ -55,32 +55,6 @@ def load_results(cdssm_spec_name, objective, N, T, num, n_runs, i):
     
     return results_dict
 
-
-# Add plotting functionality for SMC objects
-
-class PlotSMC(object):
-    """
-    Adds plotting functionality to an SMC object.
-    """
-    def plot_ess(self):
-        if not self.summaries:
-            raise ValueError('ESSs not stored. To store ESS, on `collectors` when initialising SMC.')            
-        N = self.N; T = self.fk.T
-        ESSs = self.summaries.ESSs
-        label = self.fk.sname if hasattr(self.fk, 'sname') else self.fk.__class__.__name__.lower()
-        plt.figure()
-        plt.plot(np.arange(1, T+1), ESSs, label=label, linewidth=2)
-        plt.axis([1,T,0,N])
-        plt.xlabel(r'$t$')
-        plt.ylabel('ESS')
-        return plt.gcf(), plt.gca()
-
-class PlotSummaries(object):
-    """
-    We use this class to add methods to the SMC object that allow us to plot the effective sample sizes.
-    """
-    pass
-
 # Boxplots
 #--------------------------------------------------------------------------
 
