@@ -13,7 +13,7 @@ from particles.kalman import MVLinearGauss, Kalman
 from particles.collectors import Moments
 import particles.state_space_models as ssms
 
-from sdes.cdssm_lib import CDSSM_LIB
+from sdes.cdssm_lib import CDSSM_LIB, build_cdssm
 import sdes.sdes as sdes
 from sdes.smoothing import modif_smoothing_worker
 import sdes.feynman_kac as sfk
@@ -84,21 +84,11 @@ add_funcs = default_add_funcs
 # online_smoothing_collectors = [MultiOnline_smooth_naive, MultiOnline_smooth_ON2, MultiOnline_smooth_mcmc]
 online_smoothing_collectors = [MultiOnline_smooth_naive, MultiOnline_smooth_mcmc]
 
-# FK models that for the basis of the cdssm
+# If set to True, then overrides manual setting of FK models in the cdssm_lib, and runs all possible FK models.
+fk_names_override = False
 
-# If set to None, then all FK models are used.
-# fk_names = None
-sde_cls = CDSSM_LIB[cdssm_spec_name]['sde_cls']
-if issubclass(sde_cls, sdes.HypoellipticSDE) and not smoothing:
-    # To test hypoelliptic filtering:
-    fk_names = ['BootstrapDA', 'BwG_OU_IOUP', 'BwG_DBr_OUP', 'BwG_NDBr_OUP', 'BwR_OU_OUP', 'BwR_DBr_OUP', 'BwR_NDBr_OUP']
-if issubclass(sde_cls, sdes.HypoellipticSDE) and smoothing:
-    # To test hypoelliptic smoothing:
-    fk_names = ['BwR_OU_OUP', 'BwR_DBr_OUP', 'BwR_INDBr_OUP']
-
-if not issubclass(sde_cls, sdes.HypoellipticSDE):
-    # To test elliptic filtering and smoothing:    
-    fk_names = ['BsR_DH', 'BwR_OU_OUP', 'BwR_DH_OUP', 'BwR_DH_IOUP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
+# If set to None, takes T from the cdssm_lib. Otherwise, we need to set it to a +ve integer.
+T_override = None
 
 # ------------------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------------------
@@ -220,7 +210,7 @@ def store_results():
     num = num_filt if objective != 'smoothing' else num_smth
     nruns = nruns_filt if objective != 'smoothing' else nruns_smth
     filename = f'{short_objective[1:]}_N={N}_T={T}_num={num}_n_runs={nruns}_{i}.pkl'
-    os.chdir(f'./results_new/{cdssm_spec_name}/')
+    os.chdir(f'./results/{cdssm_spec_name}/')
 
     # Pickle (serialize) the object using dill
     t1 = time.perf_counter()
@@ -229,45 +219,24 @@ def store_results():
     storage_time = time.perf_counter() - t1
     print(f"Object has been pickled to {filename}. \n Storage time: {storage_time}")
 
-# Not used in the script, but can be used to load results from the script into e.g a notebook:
-
-def load_results(cdssm_name, sde_name, N, T, num, n_runs, i, objective):
-    dir_name = f'/Users/chris_stanton/Library/CloudStorage/OneDrive-UniversityCollegeLondon/PhD/offline-smoothing-for-diffusions/scripts/results/{objective}/{cdssm_name}/{sde_name}'
-    os.chdir(dir_name)
-
-    filename = f'results_N={N}_T={T}_num={num}_n_runs={n_runs}_{i}.pkl'
-    # Unpickle (deserialize) the object using dill
-    with open(filename, 'rb') as f:
-        results_dict = dill.load(f)
-    
-    return results_dict
-        
 #------------------------------------------------------------------------------------------------------------
 #------------------------------------------------------------------------------------------------------------
 
-cdssm_spec = CDSSM_LIB[cdssm_spec_name]
+# Build the CDSSM from the spec:
+cdssm = build_cdssm(cdssm_spec_name)
 
-# Extract obejects from the CDSSM Spec:
-sde_cls = cdssm_spec['sde_cls']
-cdssm_cls = cdssm_spec['cdssm_cls']
-sde_params = cdssm_spec['sde_params']
-cdssm_params = cdssm_spec['cdssm_params']
-T = cdssm_spec['default_T']
+# Take the fk_names from the spec:
+fk_names = CDSSM_LIB[cdssm_spec_name]['fk_names'] if not fk_names_override else None
+T = CDSSM_LIB[cdssm_spec_name]['default_T'] if not T_override else T_override 
 
-# We define the underlying SDE:
-sde = sde_cls(**sde_params)
-
-# We define the CDSSM:
-cdssm = cdssm_cls(sde, **cdssm_params)
-
-# We generate some synthetic data from the process:
-np.random.seed(34953)
+# Generate some synthetic data from the process:
+np.random.seed(CDSSM_LIB[cdssm_spec_name]['seed'])
 x, y = cdssm.simulate(T)
 
 # Extract the ending points: the main target for inference:
-idx = x[0].dtype.names[-1]
-et_s = np.concatenate([x_path[idx] for x_path in x], axis=0).T # (dimX, T)
+et_s = np.concatenate([x_path[x_path.dtype.names[-1]] for x_path in x], axis=0).T # (dimX, T)
 
+# Assuming that the transition density of the SDE is known, we can construct a DiscreteDiscrete SSM:
 discrete_ssm = cdssm.discrete_ssm()
 
 if __name__ == '__main__':
