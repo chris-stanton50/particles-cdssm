@@ -91,7 +91,8 @@ IOU = {
                     },
     'default_T': 100,
     'seed': 34953,
-    'fk_names': ['BootstrapDA', 'BwG_OU_OUP', 'BwR_OU_OUP', 'BwG_NDBr_OUP', 'BwR_NDBr_OUP', 'BwG_OU_NDBBrP', 'BwR_OU_NDBBrP']
+    # 'fk_names': ['BootstrapDA', 'BwG_OU_OUP', 'BwR_OU_OUP', 'BwG_NDBr_OUP', 'BwR_NDBr_OUP', 'BwG_OU_NDBBrP', 'BwR_OU_NDBBrP']
+    'fk_names': ['BwR_OU_OUP', 'BwR_NDBr_OUP', 'BwR_OU_NDBBrP']
     }
 
 #-----------------------------------------------------------------------------------------
@@ -102,7 +103,7 @@ Filtering run time est: 7h
 fk_names:
 ------------
 In this example, the 'matching condition' implies that when constructing backward proposals,
-unless we add some drift for no reason, we must 'always' use an exact diffusion bridge proposal. 
+unless we add some drift for no reason, we must 'always' use an exact diffusion bridge proposal.
 """
 IBM = {
     'sde_cls': sdes.IntegratedBrownianMotion,
@@ -118,7 +119,8 @@ IBM = {
                     },
     'default_T': 100,
     'seed': 34953,
-    'fk_names': ['BootstrapDA', 'BwG_NDBr_DBrP', 'BwR_NDBr_DBrP', 'BwG_NDBr_NDBBrP', 'BwR_NDBr_NDBBrP']
+    # 'fk_names': ['BootstrapDA', 'BwG_NDBr_DBrP', 'BwR_NDBr_DBrP', 'BwG_NDBr_NDBBrP', 'BwR_NDBr_NDBBrP']
+    'fk_names': ['BwR_NDBr_DBrP', 'BwR_NDBr_NDBBrP']
     }
 
 #-----------------------------------------------------------------------------------------
@@ -150,6 +152,9 @@ def build_cdssm(cdssm_spec_name):
     cdssm = cdssm_cls(sde, **cdssm_params)
     return cdssm
 
+if __name__ == "__main__":
+    for value in CDSSM_LIB.keys():
+        print(value)
 
 # We may want to use this covariance matrix to create a mv_ou_4d cdssm spec:
 # phi = 0.3 * nla.cholesky(np.array([[1., 0.9, 0.8, 0.5], 

@@ -22,13 +22,19 @@ from sdes.collectors import default_add_funcs, MultiOnline_smooth_naive, MultiOn
 
 # Process command line arguments
 
-assert sys.argv[1] in list(CDSSM_LIB.keys()), "Please specify an existing CDSSM spec as the first cli"
-cdssm_spec_name = sys.argv[1]
+assert sys.argv[1] in ['-local', '-remote'], "Please specify whether the script is being run locally or remotely"
+remote = True if sys.argv[1] == '-remote' else False
 
-assert sys.argv[2] in ['-os', '-s', '-f'], "Please specify whether you want to run filtering, smoothing or online-smoothing"
-smoothing = True if sys.argv[2] in ['-s', '-os'] else False
+assert sys.argv[2] in list(CDSSM_LIB.keys()), "Please specify an existing CDSSM spec as the first cli"
+cdssm_spec_name = sys.argv[2]
 
-short_objective = sys.argv[2]
+assert sys.argv[3] in ['-os', '-s', '-f'], "Please specify whether you want to run filtering, smoothing or online-smoothing"
+smoothing = True if sys.argv[3] in ['-s', '-os'] else False
+
+assert sys.argv[4] in ['-test', '-live'], "Please specify whether you want to run a test or a live run"
+test = True if sys.argv[4] == '-test' else False
+
+short_objective = sys.argv[3]
 objectives_map = {'-f': 'filtering', '-s': 'smoothing', '-os': 'online_smoothing'}
 objective = objectives_map[short_objective]
 
@@ -40,6 +46,9 @@ objective = objectives_map[short_objective]
 # File storage index
 i = 20
 
+i = 0 if test else i
+if remote:
+    i += 100
 # -----------------------------------------------------------------------------------------
 # Algorithm Parameters
 # -----------------------------------------------------------------------------------------
@@ -50,10 +59,10 @@ i = 20
 bench_ssm_fk_cls = ssms.GuidedPF
 
 # Benchmark DiscreteDiscrete SSM parameters (used when model sde has known transition density)
-bench_N_ssm_filt = 1000000
+bench_N_ssm_filt = 10 if test else 1000000
 qmc = True
 
-bench_N_ssm_smth = 1000000
+bench_N_ssm_smth = 10 if test else 1000000
 # bench_N_ssm_smth = 1000000 # Saved as a separate variable in case we want to use an O(N^2) smoothing algorithm
 bench_smth_methods = ['FFBS_MCMC']
 
@@ -73,10 +82,15 @@ bench_cdssm_smth_methods = ['FFBS_MCMC']
 #---------------------Multi SMC/CDSSM SMC parameters-------------
 
 # these are used both for filtering and online-smoothing
-N_filt=[100]; num_filt=[10]; nruns_filt=100
+N_filt=[5] if test else [100]
+num_filt=[10]
+nruns_filt=1 if test else 100
 
 # (Offline) Smoothing parameters
-N_smth=[100]; num_smth=[10]; nruns_smth=100
+N_smth=[5] if test else [100]
+num_smth=[10]
+nruns_smth=1 if test else 100
+
 methods = ['geneaology', 'FFBS_MCMC']
 
 # Additive functions to store and methods to use for online smoothing
