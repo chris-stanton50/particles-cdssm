@@ -2,43 +2,42 @@ Focus now on what needs to be done to finish the paper!
 
 ## High Priority
 
-To do tomorrow morning: 
+- Finish getting your nice plot to work.
 
-- Run the results for the filtering hypoelliptic case: 2D integrated bm.
-- Get some results ready to show Alex, but don't make this the focus of the meeting.
-- Only then do the rest of the stuff.
+### IOU Model
 
-### Run methods
+- Debug and run the 'IBM' model in the filtering case.
+- Check that the 'guided' and 'reparameterised' outputs are the same.
 
-- Re-run the results for the `MvEllipticSDEs` `MvOrnsteinUhlenbeck` and `TS_MvOrnsteinUhlenbeck`. 
-    -  `MvOrnsteinUhlenbeck`: N=100, T=100, n_runs=100 -f -s - os (without $N^2$ smoothing)
-    - `TS_MvOrnsteinUhlenbeck`: N=100, T=10, n_runs=100 -f -s -os (without $N^2$ smoothing)
-- Run the filtering for both a 2D/4D linear hypoelliptic example. 
+### IBM Model
 
-### Check results
+- Debug and run the 'IBM' model in the filtering case.
+- Check that the 'guided' and 'reparameterised' outputs are the same.
 
-- Check that the results for 2 Elliptic cases are consistent with those obtained under the previous API.
-- Check that the results from the hypoelliptic filtering are working.
+### FHN (Fitzhugh-Nagumo) Model
 
-Once all of the above is done, commit the changes and merge the changes from hypoelliptic into the master branch.
-
-
-- *Note*: whe
-- In the elliptic case, run an example of a long time series with high observation noise. In this example, offline smoothing methods will perform well, and when extended to the parameter, the PGBS will outperform PG and standard PMMH.   
-- Debug an example of a hypoelliptic offline smoothing thing. 
-- Check that the filtering results are consistent for the backward guided and backward reparameterised Feynman-Kac models in the elliptic case.
-- Offline smoothing: check that the elliptic and hypoelliptic case run smoothly. 
-- Write a script to evaluate the curse of dimensionality for particle filters in high dimensions.
+- Look at the paper and come up with a parameterisation
 - Implement the standard and integrated forms of the Fitzhugh-Nagumo model. We can use numerical simulation to check whether the derivation is correct. 
 - Implement some simulation schemes for hypoelliptic diffusions (e.g the locally Gaussian scheme).
+- Come up with a Time Varying CDSSM so that you can test the smoothing in the hypoelliptic case.
+- Run the inference algorithm on the FitzHugh-Nagumo model with real data, using Ito's Formula to transform into an integrated diffusion.
+- In the elliptic case, run an example of a long time series with high observation noise. In this example, offline smoothing methods will perform well, and when extended to the parameter, the PGBS will outperform PG and standard PMMH.   
 
 ## Medium Priority
 
-- The two files `sdes.py` and `feynman_kac.py` need to be cleaned up a bit after all of the changes that you have made. It may also be valuable to then clean up the `continuous_discrete_ssms.py`, the `state_space_models` file and the `numerical_schemes.py` file. 
+### Linear SDE proxies for a non-linear dynamical system
+
+- When a system is highly non-linear, the approach of taking the 0/1st order approximation of the drift coefficient and taking the 0th order approximation of the diffusion coefficient is likely to fail. To come up with a good proposal in these cases, we propose a simulation-based approach: if our observations are in a similar position, then we can simply propagate the signal process a few times to come up with a good proposal. Think about this for the FHN model...!
+
+- When locally linearising an SDE to find an appropriate Linear SDE, if the drift coefficient is a constant (so `db` is 0), then if one has chosen an OU proposal (forward, end_pt or aux_bridge), then the algorithm will break.
+- Assuming that the compute cost remains constant, we would assume that performance would be better from linearising the drift coefficient (i.e using an OU). Thus, default behaviour in the package should be set to use a diagonal OU Linear SDE.
+
+### Cleaning the Library
+
+- The two files `sdes.py` and `feynman_kac.py` need to be cleaned up a bit after all of the changes that you have made. It may also be valuable to then clean up the `continuous_discrete_ssms.py`, the `state_space_models` file and the `numerical_schemes.py` file.
 - Create a `sdelib.py` file, that contains implementations of standard non-linear SDEs that appear in the literature.
 - Idea: Create a `linearsdelib.py` file, that contains implementations of the standard linear SDEs that one should use when interacting with the library API. Think a bit about whether this is the best approach to take. 
 - Extend the `MvLinearGauss` class from the particles package, so that it can deal with the case of non-zero drift in the latent state. Extend this change to the `MvDiscreteLinearGauss` class, so that one can use Kalman filter/RTS smoothers to benchmark performance of time varying SDEs and Hypoelliptic SDEs.     
-
 - The API for univariate SDEs is a complete mess!
 
 There are methods left over from when you tried to set things up so that you could evaluate the score function in the OrnsteinUhlenbeck class.
