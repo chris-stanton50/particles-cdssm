@@ -69,7 +69,6 @@ MV_OU = {
 
 # -----------------------------------------------------------------------------------------
 # ------------------IntegratedOrnsteinUhlenbeck + GaussianCDSSM ---------------------------
-
 """
 Filtering run time est: 6h 40m
 Smoothing run time est (excl. ON2): 9h 20m
@@ -151,10 +150,6 @@ def build_cdssm(cdssm_spec_name):
     # We define the CDSSM:
     cdssm = cdssm_cls(sde, **cdssm_params)
     return cdssm
-
-if __name__ == "__main__":
-    for value in CDSSM_LIB.keys():
-        print(value)
 
 # We may want to use this covariance matrix to create a mv_ou_4d cdssm spec:
 # phi = 0.3 * nla.cholesky(np.array([[1., 0.9, 0.8, 0.5], 
