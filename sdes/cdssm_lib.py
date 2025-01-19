@@ -6,6 +6,8 @@ import particles.state_space_models as ssms
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+# Note: Run times are based on the local: a trial run indicates that the remote is ~40% faster 
+# than the local. (This is based on the MV_OU model for filtering.)
 #------------------------------------------------------------------------------------------
 # ------------------ TS_MvOrnsteinUhlenbeck + TimeSwitchingGaussianCDSSM ------------------
 """
@@ -64,8 +66,8 @@ MV_OU = {
                     },
     'default_T': 100,
     'seed': 34953,
-    'fk_names': ['BsR_DH', 'BwR_OU_OUP', 'BwR_DH_OUP', 'BwR_DH_IOUP', 'BwR_DH_NDBBrP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
-}
+    'fk_names': ['BsR_DH', 'BwR_OU_OUP', 'BwR_DH_OUP', 'BwR_DH_IOUP', 'BwR_DH_NDBBrP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
+    }
 
 # -----------------------------------------------------------------------------------------
 # ------------------IntegratedOrnsteinUhlenbeck + GaussianCDSSM ---------------------------
