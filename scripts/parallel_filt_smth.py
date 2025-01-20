@@ -22,6 +22,7 @@ from sdes.collectors import default_add_funcs, MultiOnline_smooth_naive, MultiOn
 
 # Process command line arguments
 
+# python parallel_filt_smth.py -local mv_ou -f -live
 assert sys.argv[1] in ['-local', '-remote'], "Please specify whether the script is being run locally or remotely"
 remote = True if sys.argv[1] == '-remote' else False
 
@@ -46,6 +47,7 @@ objective = objectives_map[short_objective]
 # File storage index
 i = 20
 
+# Always use 0 when running
 i = 0 if test else i
 if remote:
     i += 100
@@ -83,7 +85,7 @@ bench_cdssm_smth_methods = ['FFBS_MCMC']
 
 # these are used both for filtering and online-smoothing
 N_filt=[5] if test else [100]
-num_filt=[10]
+num_filt=[10, 31, 100, 316, 1000]
 nruns_filt=1 if test else 100
 
 # (Offline) Smoothing parameters
