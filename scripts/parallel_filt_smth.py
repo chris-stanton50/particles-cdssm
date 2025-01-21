@@ -35,6 +35,9 @@ smoothing = True if sys.argv[3] in ['-s', '-os'] else False
 assert sys.argv[4] in ['-test', '-live'], "Please specify whether you want to run a test or a live run"
 test = True if sys.argv[4] == '-test' else False
 
+# If set to None, takes T from the cdssm_lib. 
+T_override = int(sys.argv[5]) if len(sys.argv) > 5 else None
+
 short_objective = sys.argv[3]
 objectives_map = {'-f': 'filtering', '-s': 'smoothing', '-os': 'online_smoothing'}
 objective = objectives_map[short_objective]
@@ -102,9 +105,6 @@ online_smoothing_collectors = [MultiOnline_smooth_naive, MultiOnline_smooth_mcmc
 
 # If set to True, then overrides manual setting of FK models in the cdssm_lib, and runs all possible FK models.
 fk_names_override = False
-
-# If set to None, takes T from the cdssm_lib. Otherwise, we need to set it to a +ve integer.
-T_override = None
 
 # ------------------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------------------
