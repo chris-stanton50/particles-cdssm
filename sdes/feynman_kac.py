@@ -749,6 +749,9 @@ def print_summary(out_func):
 
 @print_summary
 def summaries(pf):
+    # Ensure that the cpu time is passed to the summaries object before returning:
+    if hasattr(pf, 'cpu_time'):
+        setattr(pf.summaries, 'cpu_time', pf.cpu_time)
     return pf.summaries
     
 def multiCDSSM_SMC(nruns=10, nprocs=0, out_func=None, collect=None, **args):
