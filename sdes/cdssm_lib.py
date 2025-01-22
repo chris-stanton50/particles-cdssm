@@ -66,7 +66,7 @@ MV_OU = {
                     },
     'default_T': 10,
     'seed': 34953,
-    'fk_names': ['BsR_DH', 'BwR_OU_OUP', 'BwR_DH_OUP', 'BwR_DH_IOUP', 'BwR_DH_NDBBrP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
+    'fk_names': ['BsR_DH', 'BwR_DH_OUP', 'BwR_DH_NDBBrP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
     }
 
 # -----------------------------------------------------------------------------------------
