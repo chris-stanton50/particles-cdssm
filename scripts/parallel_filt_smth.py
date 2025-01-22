@@ -35,8 +35,14 @@ smoothing = True if sys.argv[3] in ['-s', '-os'] else False
 assert sys.argv[4] in ['-test', '-live'], "Please specify whether you want to run a test or a live run"
 test = True if sys.argv[4] == '-test' else False
 
-# If set to None, takes T from the cdssm_lib. 
-T_override = int(sys.argv[5]) if len(sys.argv) > 5 else None
+# If set to None, takes T from the cdssm_lib.
+if smoothing:
+    covY_override = None
+    T_override = int(sys.argv[5]) if len(sys.argv) > 5 else None
+else: # Change the noise regime for the filtering:
+# If set to None, takes covY from the cdssm_lib.
+    covY_override = float(sys.argv[5]) if len(sys.argv) > 5 else None
+    T_override = None
 
 short_objective = sys.argv[3]
 objectives_map = {'-f': 'filtering', '-s': 'smoothing', '-os': 'online_smoothing'}
@@ -48,9 +54,12 @@ objective = objectives_map[short_objective]
 # smoothing=False
 
 # File storage index
-i = 20
+if not smoothing and covY_override is not None:
+    i = int(covY_override) # Noise regime
+else:
+    i = 1000
 
-# Always use 0 when running
+# Always use 0 when running a test
 i = 0 if test else i
 if remote:
     i += 100
@@ -89,7 +98,8 @@ bench_cdssm_smth_methods = ['FFBS_MCMC']
 # these are used both for filtering and online-smoothing
 N_filt=[5] if test else [100]
 num_filt=[10, 31, 100, 316, 1000]
-nruns_filt=1 if test else 100
+nruns_filt_ssm=1 if test else 100000
+nruns_filt_cdssm=1 if test else 100
 
 # (Offline) Smoothing parameters
 N_smth=[5] if test else [100]
@@ -120,8 +130,8 @@ bench_multi_cdssm_smoothing_options = {'f': modif_smoothing_worker, 'nruns': 1, 
                        'protected_args': {'add_funcs': add_funcs}, 'method': bench_cdssm_smth_methods, 'N': [bench_N_ssm_smth], 'num': [bench_num_smth], 'smc_cls': sfk.CDSSM_SMC}
 
 # Multi SMC/CDSSM SMC Filtering Parameters (excl FK models)
-multi_smc_options = {'out_func': sfk.summaries, 'nruns': nruns_filt, 'nprocs': 1, 'collect': [Moments], 'N': N_filt, 'qmc': [False], 'store_history': False}
-multi_cdssm_smc_options = {'out_func': sfk.summaries, 'nruns': nruns_filt, 'nprocs': 1, 'collect': [Moments], 'N': N_filt, 'store_history': False, 'num': num_filt}
+multi_smc_options = {'out_func': sfk.summaries, 'nruns': nruns_filt_ssm, 'nprocs': 1, 'collect': [Moments], 'N': N_filt, 'qmc': [False], 'store_history': False}
+multi_cdssm_smc_options = {'out_func': sfk.summaries, 'nruns': nruns_filt_cdssm, 'nprocs': 1, 'collect': [Moments], 'N': N_filt, 'store_history': False, 'num': num_filt}
 
 # Multi SMC/CDSSM SMC Smoothing Parameters
 multiplexer_options = {'f': modif_smoothing_worker, 'nruns': nruns_smth, 'nprocs': 1,
@@ -224,7 +234,7 @@ def store_results():
     # File path where we will store the pickled object
     N = N_filt if objective != 'smoothing' else N_smth
     num = num_filt if objective != 'smoothing' else num_smth
-    nruns = nruns_filt if objective != 'smoothing' else nruns_smth
+    nruns = nruns_filt_cdssm if objective != 'smoothing' else nruns_smth
     filename = f'{short_objective[1:]}_N={N}_T={T}_num={num}_n_runs={nruns}_{i}.pkl'
     os.chdir(f'./results/{cdssm_spec_name}/')
 
@@ -240,6 +250,14 @@ def store_results():
 
 # Build the CDSSM from the spec:
 cdssm = build_cdssm(cdssm_spec_name)
+
+if not smoothing and covY_override is not None:
+    # Specify the noise regime for the filtering:
+    cdssm.covY = ((covY_override/100) ** 2) * np.diag(np.diag(cdssm.model_sde.Cov(0., cdssm.x0)[0])) 
+
+print(f'CovY: {cdssm.covY}')
+print(f'Input: {covY_override}% noise:')
+print(f'Std dev: {np.sqrt(np.diag(cdssm.covY))}')
 
 # Take the fk_names from the spec:
 fk_names = CDSSM_LIB[cdssm_spec_name]['fk_names'] if not fk_names_override else None
