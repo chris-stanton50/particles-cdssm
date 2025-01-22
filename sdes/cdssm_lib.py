@@ -62,7 +62,7 @@ MV_OU = {
     'cdssm_params': {'x0': np.zeros((1, 2)),
                     'delta_s': 1., 
                     'G': np.eye(2),
-                    'covY': (0.01 ** 2) * np.eye(2)
+                    'covY': (0.06 ** 2) * np.eye(2)
                     },
     'default_T': 10,
     'seed': 34953,
