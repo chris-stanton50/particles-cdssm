@@ -64,7 +64,7 @@ MV_OU = {
                     'G': np.eye(2),
                     'covY': (0.06 ** 2) * np.eye(2)
                     },
-    'default_T': 10,
+    'default_T': 50,
     'seed': 34953,
     'fk_names': ['BsR_DH', 'BwR_DH_OUP', 'BwR_DH_NDBBrP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
     }
