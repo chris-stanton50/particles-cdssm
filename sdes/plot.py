@@ -1,11 +1,11 @@
 """
-We use this module to generate visualisations that appear in notebooks for parallel filtering and smoothing. 
+We use this module to generate visualisations that appear in notebooks for parallel filtering and smoothing.
 
 We use 3 different types of plot to evaluate the performance of the multiple run particle filter/smoother methods:
 
 1. Boxplots: for moments (across dimension/time, DT plots), log-likelihoods (across time, T plots), and CPU times
 2. Mean Squared Error (MSE) plots (across dimension, d plots)
-3. Effective Sample Size (ESS) plots 
+3. Effective Sample Size (ESS) plots
 """
 
 import os
@@ -13,7 +13,7 @@ import dill
 import numpy as np
 import seaborn as sb
 import matplotlib.pyplot as plt
-
+from sdes.tools import sims_to_array
 
 # Add plotting functionality for SMC objects
 
@@ -34,6 +34,12 @@ class PlotSMC(object):
         plt.ylabel('ESS')
         return plt.gcf(), plt.gca()
 
+    def plot_history(object):
+        """
+        Nice visualisation of some iterations of the particle history.
+        """
+        pass
+
 class PlotSummaries(object):
     """
     We use this class to add methods to the SMC object that allow us to plot the effective sample sizes.
@@ -43,9 +49,10 @@ class PlotSummaries(object):
 # Load Results
 #--------------------------------------------------------------------------
 
-def load_results(cdssm_spec_name, objective, N, T, num, n_runs, i):
-    dir_name = '/Users/chris_stanton/Library/CloudStorage/OneDrive-UniversityCollegeLondon/PhD/offline-smoothing-for-diffusions/'
-    dir_name += f'scripts/results_new/{cdssm_spec_name}'
+def load_results(cdssm_spec_name, objective, N, T, num, n_runs, i, remote=False):
+    results_str = 'results' if not remote else 'results_remote'
+    dir_name = '/Users/chris_stanton/Library/CloudStorage/OneDrive-UniversityCollegeLondon/PhD/particles-cdssm/'
+    dir_name += f'scripts/{results_str}/{cdssm_spec_name}'
     os.chdir(dir_name)
 
     filename = f'{objective}_N={N}_T={T}_num={num}_n_runs={n_runs}_{i}.pkl'
@@ -55,6 +62,44 @@ def load_results(cdssm_spec_name, objective, N, T, num, n_runs, i):
     
     return results_dict
 
+# CDSSM Plot
+#--------------------------------------------------------------------------
+
+def dim_plots(cdssm, x, y, len=2):
+    """
+    Plots on separate axes each dimension of the cdssm:
+    Currently assumed equidistant observations.
+    """
+    # Convert all data into unstructured np arrays
+    x = x[:len]; y = y[:len]
+    x0 = cdssm.x0; dimX = cdssm.model_sde.dimX
+    s_ts = np.array([cdssm.S(t) for t in range(1, len+1)]) # (len, )
+    X, ts = sims_to_array(x, s_ts, x0=x0) # (1, len*num+1, dimX), (l*num+1, )
+    et_s = np.concatenate([x0] + [x_path[x_path.dtype.names[-1]] for x_path in x], axis=0) # (len, dimX)
+    s_ts_0 = np.concatenate([[0.], s_ts], axis=0) # (len+1, )
+    Y = np.concatenate(y, axis=0) # (len, dimX)
+    G = cdssm.G if hasattr(cdssm, 'G') else cdssm.G_1 # (dimY, dimX)
+    max_abs_values = 1.2 * np.max(np.abs(X[0, :, :]), axis=0)
+    # Create plots
+    fig, axes = plt.subplots(dimX, 1, figsize=(20, 4*dimX), sharex=True)
+    for i, ax in enumerate(axes):
+        # Put signal on each axis
+        ax.plot(ts, X[0, :, i], c='red') # Plot the signal
+        # ax.plot(s_ts_0, et_s[:, i], 'o', c='red', markersize=5.) # Plot the observations
+        # If signal is involved in the generation of the observation, plot them:
+        for j, elt in enumerate(G[:, i]):
+            if elt != 0.:
+                ax.plot(s_ts, Y[:, j], 'x', c='limegreen', markersize=10.) # Plot the observations
+        # Decorate plot (vlines, xticks, xlim, ylim, xlab, ylab)
+        ax.vlines(x=s_ts_0, ymin=-1., ymax=1., colors='black', linestyles='--', alpha=0.3, linewidth=1)
+        ax.set_xticks(s_ts_0)
+        ax.set_xlabel(r'$t$')
+        ax.set_ylabel(f'$X_{i+1}$')
+        ax.set_xlim(0., len)
+        ax.set_ylim(-max_abs_values[i], max_abs_values[i])
+    fig.suptitle('Sample CDSSM simulation')
+    return fig, axes
+    
 # Boxplots
 #--------------------------------------------------------------------------
 

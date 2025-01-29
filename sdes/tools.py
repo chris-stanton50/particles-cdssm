@@ -230,6 +230,48 @@ def grad_grad_log_linear_gaussian(a, b, s):
     """
     return (-1.*(a * a))/s
 
+def sims_to_array(x, S_ts, x0=None):
+    """
+    Converts list of structured arrays to a single structured array.
+    These objects are typically generated from 2 sources:
+
+    - Generation of synthetic data (cdssm.simulate method)
+    - The list within a particles history object (F/B Guided, not F/B Reparameterised)
+    
+    Inputs
+    ----------
+    x: List of structured arrays of length l
+        x[i] is a structured array of shape (N, ) 
+        contains num fields each of dimension (1, dimX)
+    S_ts: (l, ) Discrete observation times that the simulations correspond to
+    x0: (Optional) (1, dimX): If included, this initial point is prepended to the 
+        returned unstructured array.
+
+    Returns
+    ----------
+    X: Unstructured array of shape (N, l*num (+1), dimX)
+    ts: Discretisation points: (l*num (+1), )
+    """
+    names = x[0].dtype.names; num = len(names)
+    N = x[0].shape[0]; dimX = x[0][names[0]].shape[1]
+    X = []; ts = []
+    for i in range(len(x)):
+        names = x[i].dtype.names
+        num = len(names)
+        x_i = np.stack([x[i][name] for name in names], axis=1) # (N, num, dimX)
+        if i == 0:
+            ts_i = np.arange(1, num+1, dtype=np.float64) * (S_ts[i])/num # (num, )
+        else: 
+            ts_i = S_ts[i-1] + np.arange(1, num+1, dtype=np.float64) * (S_ts[i] - S_ts[i-1])/num # (num, )
+        X.append(x_i); ts.append(ts_i)
+    X = np.concatenate(X, axis=1) # (N, l*num, dimX)
+    ts = np.concatenate(ts, axis=0) # (N, l*num, dimX)
+    if x0 is not None:
+        x0_arr = np.stack([x0]*N, axis=0) # (N, 1, dimX)
+        X = np.concatenate([x0_arr, X], axis=1) # (N, l*num + 1, dimX)
+        ts = np.concatenate([np.array([0.]), ts], axis=0) # (num+1,)
+    return X, ts
+    
 def struct_array_to_array(struct_X):
     """
     Utility function to convert structured array consisting of paths from the proposal SDE to 
