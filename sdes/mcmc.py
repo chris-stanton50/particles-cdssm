@@ -11,7 +11,7 @@ from particles.mcmc import CSMC
 
 import sdes.continuous_discrete_ssms as cdssms
 import sdes.feynman_kac as sfk
-from sdes.feynman_kac import CDSSM_SMC, CDSSM_FeynmanKac
+from sdes.core import CDSSM_SMC, CDSSM_FeynmanKac
 from sdes.tools import init_kwargs_dict
 
 
@@ -21,13 +21,11 @@ Smoothing (X_{1:T} | Y_{1:T}), with no involvement of the parameter.
     For standard State Space Models:
 
     PIMH: (Particle Independent Metropolis-Hastings) *Ready to be tested*
-
     CSMC: (Conditional SMC MCMC): Conditional SMC for standard SSMs. *Ready to be tested*
 
     For CDSSMs:
     
-    CDSSM_PIMH: (Particle Independent Metropolis-Hastings) *Ready to be tested*
-    
+    CDSSM_PIMH: (Particle Independent Metropolis-Hastings) *Ready to be tested*    
     CSMC: (Conditional SMC MCMC): Conditional SMC for CDSSMs. *Ready to be tested*
     
     

@@ -1,47 +1,42 @@
 import numpy as np
 import numpy.linalg as nla
 import sdes.sdes as sdes
-from sdes.continuous_discrete_ssms import GaussianCDSSM, TimeSwitchingGaussianCDSSM
+from sdes.continuous_discrete_ssms import GaussianCDSSM, MvGaussianCDSSM
 import particles.state_space_models as ssms
+import particles.distributions as dists
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+
+"""
+We use this module to define the CDSSM specifications that we will use in our experiments.
+
+- For filtering experiments, we are interested in evaluating the performance of guided particle
+filters in the low noise regime. 
+
+- For smoothing experiments, we are interested in evaluating the performance of smoothing methods
+as the number of observations $T$ increases.
+"""
 # Note: Run times are based on the local: a trial run indicates that the remote is ~40% faster 
 # than the local. (This is based on the MV_OU model for filtering.)
-#------------------------------------------------------------------------------------------
-# ------------------ TS_MvOrnsteinUhlenbeck + TimeSwitchingGaussianCDSSM ------------------
-"""
-(Used to test whether smoothing algorithms are working as intended. Signal changes at T=2
-so that it has low variance, and observation noise changes at T=10 so that it is highly informative.
-therefore, the smoothing distribution is very different from the filtering distribution for T < 10.
-"""
-TS_MV_OU = {
-    'sde_cls': sdes.TS_MvOrnsteinUhlenbeck,
-    'cdssm_cls': TimeSwitchingGaussianCDSSM,
-    'sde_params': {'dimX': 2,
-                    't_switch': 2,
-                    'rho_1': 0.01*np.ones((1, 2)),
-                    'mu_1': np.zeros((1, 2)),
-                    'phi_1': nla.cholesky(np.array([[1., 0.9,], [0.9, 1.]])),
-                    'rho_2': 0.01*np.ones((1, 2)),
-                    'mu_2': np.zeros((1, 2)),
-                    'phi_2': 0.01 * nla.cholesky(np.array([[1., 0.9,], [0.9, 1.]]))
-                    },
-    'cdssm_params': {'x0': np.zeros((1, 2)),
-                    'delta_s': 1.,
-                    'G_1': np.eye(2),
-                    'G_2': np.eye(2), 
-                    'covY_1': (0.4 ** 2) * np.eye(2),
-                    'covY_2': 0.001 * (0.4 ** 2) * np.eye(2),
-                    't_switchY': 10
-                    },
+#----------------------------------------------------------------------------------------------
+# ---------------------------- OrnsteinUhlenbeck + GaussianCDSSM ------------------------------
+
+OU = {
+    'sde_cls': sdes.OrnsteinUhlenbeck,
+    'cdssm_cls': GaussianCDSSM,
+    'filtering_sde_params': {'rho': 1.0, 'mu': 0., 'phi': 1.0},
+    'smoothing_sde_params': {'rho': 0.01, 'mu': 0., 'phi': 0.01},
+    'filtering_cdssm_params': {'x0': 0., 's_ts': 1., 'sigmaY': 0.1},
+    'smoothing_cdssm_params': {'x0': dists.Normal(loc=0., scale=1.), 's_ts': 1., 'sigmaY': 1.0},
+    'filtering_fk_names': ['BootstrapDA', 'BsR_DH', 'BwG_OU_OUP', 'BwR_OU_OUP', 'BwG_DH_OUP', 'BwR_DH_OUP', 'FwG_OUP', 'FwR_DH_OUP'],
+    'smoothing_fk_names': ['BootstrapDA', 'BsR_DH', 'FwG_OUP', 'FwR_DH_OUP', 'BwG_DH_DBrP', 'BwR_DH_DBrP'],
     'default_T': 10,
     'seed': 34953,
-    'fk_names': ['BsR_DH', 'BwR_OU_OUP', 'BwR_DH_OUP', 'BwR_DH_IOUP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
     }
 
 #------------------------------------------------------------------------------------------
-# ----------------------- MvOrnsteinUhlenbeck + GaussianCDSSM -----------------------------
+# ----------------------- MvOrnsteinUhlenbeck + MvGaussianCDSSM -----------------------------
 """
 (Used to test if guided filtering steps are working as intended. This model has a low noise regime,
 so guiding particles is very important for this case.)
@@ -53,97 +48,135 @@ Online smothing run time est (excl. ON2): 45 mins
 """
 MV_OU = {
     'sde_cls': sdes.MvOrnsteinUhlenbeck,
-    'cdssm_cls': GaussianCDSSM,
-    'sde_params': {'dimX': 2,
-                'rho': 0.2*np.ones((1, 2)),
+    'cdssm_cls': MvGaussianCDSSM,
+    'filtering_sde_params': {'dimX': 2,
+                'rho': 1.0*np.ones((1, 2)),
                 'mu': np.zeros((1, 2)),
-                'phi': 0.3*nla.cholesky(np.array([[1., 0.9,], [0.9, 1.]])),
+                'phi': 1.0*np.eye(2),
                 },
-    'cdssm_params': {'x0': np.zeros((1, 2)),
-                    'delta_s': 1., 
+    # 'smoothing_sde_params': {'dimX': 2,
+    #             'rho': np.array([0.01, 1.0]).reshape((1, 2)),
+    #             'mu': np.zeros((1, 2)),
+    #             'phi': np.array([[0.001, 0.], [0., 1.0]]),
+    #             },
+    'smoothing_sde_params': {'dimX': 2,
+                'rho': np.array([1.0, 1.0]).reshape((1, 2)),
+                'mu': np.zeros((1, 2)),
+                'phi': np.array([[1.0, 0.], [0., 1.0]]),
+                },
+    'filtering_cdssm_params': {'x0': np.zeros((1, 2)),
+                    's_ts': 1., 
                     'G': np.eye(2),
-                    'covY': (0.06 ** 2) * np.eye(2)
+                    'covY': 0.1 * np.eye(2)
                     },
+    'smoothing_cdssm_params': {'x0': dists.MvNormal(loc=np.zeros((1, 2)), cov=1.*np.eye(2)),
+                    's_ts': 1.,
+                    'G': np.eye(2),
+                    'covY': np.array([[1., 0.], [0., 0.1]])
+                    },
+    'filtering_fk_names': ['BootstrapDA', 'BsR_DH', 'BwG_OU_OUP', 'BwR_OU_OUP', 'BwG_DH_OUP', 'BwR_DH_OUP', 'FwG_OUP', 'FwR_DH_OUP'],
+    'smoothing_fk_names': ['BootstrapDA', 'BsR_DH', 'BwG_DH_DBrP', 'BwR_DH_DBrP'],
+    # 'smoothing_fk_names': ['BootstrapDA', 'BsR_DH'],
+    # 'smoothing_fk_names': ['BootstrapDA', 'BsR_DH', 'FwG_OUP', 'FwR_DH_OUP', 'BwG_DH_DBrP', 'BwR_DH_DBrP'],
     'default_T': 10,
     'seed': 34953,
-    'fk_names': ['BsR_DH', 'BwR_OU_OUP', 'BwR_DBr_OUP', 'BwR_DH_OUP', 'BwR_DH_NDBBrP', 'FwR_DH_OUP', 'FwR_DH_DBrP', 'FwR_DH_NDBBrP']
-    }
+}
 
-# -----------------------------------------------------------------------------------------
-# ------------------IntegratedOrnsteinUhlenbeck + GaussianCDSSM ---------------------------
+#---------------------------------------------------------------------------------------------
+#---------------------IntegratedOrnsteinUhlenbeck + MvGaussianCDSSM---------------------------
 """
-Filtering run time est: 6h 40m
-Smoothing run time est (excl. ON2): 9h 20m
-Online smothing run time est (excl. ON2): 9h 20m
-"""
+This SDE is a special case of the SDEs considered in Hairer et al (2011). The existence 
+of a continuous-time likelihood for a hypoelliptic diffusion bridge is shown in Bierkens et al (2020).
+Can be considered as the time evolution of a state of a mechanical system with friction under the 
+influence of noise.
 
+We add a mean term to the OU process for the velocity, so that the model is realistic.
+We use particle filters to infer the true values of the latent process.
+
+Filtering experiment: (Do not include in the paper) 
+----------------------
+
+We observe the position of the particle with low noise at discrete times. We want to infer at each time t, how fast the particle is moving.
+
+We set higher noise in the velocity (rough) component. We observe the particle displacement with low noise.
+We are interested in inferring the velocity at each time t.
+
+- We initialise the displacement and the velocity with low noise.
+
+Smoothing Experiment:
+----------------------
+
+We observe the position of the particle with high noise at discrete times. We know that the particle is moving at (approx.) a constant velocity.
+We know, approximately, the velocity of the particle. We want to infer the position of the particle at time 0.
+
+We set low noise in the velocity (rough) component. We initialise the displacement with high noise, and the velocity with low noise.
+We observe just the displacement with high noise. We are interested in inferring the displacement at time 0.
+
+We may need to play around with the parameters to get the experiment to work as intended.
+
+(e.g decrease the mean reversion/noise in the velocity OU process, and increase the noise in the position OU process.)
+Smoothing run time est: 7h
+"""
 IOU = {
     'sde_cls': sdes.IntegratedOrnsteinUhlenbeck,
-    'cdssm_cls': GaussianCDSSM,
-    'sde_params': {'dimX': 4,
-                    'rho': 0.2*np.ones((1, 2)),
-                    'mu': np.zeros((1, 2)),
-                    'phi': 0.3*nla.cholesky(np.array([[1., 0.9,], [0.9, 1.]])), # correlation between rough components
+    'cdssm_cls': MvGaussianCDSSM,
+    'filtering_sde_params': {'dimX': 2,
+                    'rho': 1.0*np.ones((1, 1)),
+                    'mu': 1.0*np.ones((1, 1)),
+                    'phi': 0.2*np.ones((1, 1)),
                     },
-    'cdssm_params': {'x0': np.zeros((1, 4)),
-                    'delta_s': 1., 
-                    'G': np.concatenate([np.eye(2), np.zeros((2, 2))], axis=1), # only smooth component observed
-                    'covY': (0.01 ** 2) * np.eye(2) # low noise regime
+    'smoothing_sde_params': {'dimX': 2,
+                    'rho': 1.0*np.ones((1, 1)),
+                    'mu': 1.0*np.ones((1, 1)),
+                    'phi': 0.1*np.ones((1, 1)),
                     },
-    'default_T': 100,
+    'filtering_cdssm_params': {
+                    'x0': np.zeros((1, 2)),
+                    's_ts': 1.,
+                    'G': np.array([1., 0.]).reshape((1, 2)), # smooth component observed
+                    'covY': (0.01 ** 2) * np.eye(1) # low noise regime
+                    },
+    'smoothing_cdssm_params': {'x0': dists.MvNormal(loc=np.array([0., 1.]).reshape((1, 2)), cov=0.1*np.eye(2)),
+                    's_ts': 1.,
+                    'G': np.array([1., 0.]).reshape((1, 2)), # smooth component observed
+                    'covY': (0.01 ** 2) * np.eye(1) 
+                    },
+    'filtering_fk_names': ['BootstrapDA', 'BsR_DH', 'BwG_OU_OUP', 'BwR_OU_OUP', 'BwG_DH_OUP', 'BwR_DH_OUP'],
+    'smoothing_fk_names': ['BootstrapDA', 'BwG_NDOU_OUP', 'BwR_NDOU_OUP'],
+    'default_T': 5,
     'seed': 34953,
-    # 'fk_names': ['BootstrapDA', 'BwG_OU_OUP', 'BwR_OU_OUP', 'BwG_NDBr_OUP', 'BwR_NDBr_OUP', 'BwG_OU_NDBBrP', 'BwR_OU_NDBBrP']
-    'fk_names': ['BwR_OU_OUP', 'BwR_NDBr_OUP', 'BwR_OU_NDBBrP']
     }
 
-#-----------------------------------------------------------------------------------------
-#---------------------IntegratedBrownianMotion + GaussianCDSSM ---------------------------
-"""
-Filtering run time est: 7h
-
-fk_names:
-------------
-In this example, the 'matching condition' implies that when constructing backward proposals,
-unless we add some drift for no reason, we must 'always' use an exact diffusion bridge proposal.
-"""
-IBM = {
-    'sde_cls': sdes.IntegratedBrownianMotion,
-    'cdssm_cls': GaussianCDSSM,
-    'sde_params': {'dimX': 2,
-                    'm': np.zeros((1, 1)),
-                    's': 0.3*np.ones((1, 1)), 
-                    },
-    'cdssm_params': {'x0': np.zeros((1, 2)),
-                    'delta_s': 1.,
-                    'G': np.eye(2), # both components observed
-                    'covY': (0.01 ** 2) * np.eye(2) # low noise regime
-                    },
-    'default_T': 100,
-    'seed': 34953,
-    # 'fk_names': ['BootstrapDA', 'BwG_NDBr_DBrP', 'BwR_NDBr_DBrP', 'BwG_NDBr_NDBBrP', 'BwR_NDBr_NDBBrP']
-    'fk_names': ['BwR_NDBr_DBrP', 'BwR_NDBr_NDBBrP']
-    }
 
 #-----------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------
+#---------------------IntegratedFitzHughNagumo + GaussianCDSSM ---------------------------
 
-
-CDSSM_LIB = {'ts_mv_ou': TS_MV_OU,
+CDSSM_LIB = {'ou': OU,
              'mv_ou': MV_OU,
              'iou': IOU,
-             'ibm': IBM}
+            #  'ifhn': IFHN # This is an example of parameter inference.
+             }
 
-def build_cdssm(cdssm_spec_name):
+def build_cdssm(cdssm_spec_name, smoothing):
     """
+    Inputs:
+    -------
     cdssm_spec_name: str
+    smoothing: (bool): True = smoothing, False = filtering
+
+    Rewturns:
+    --------
+    cdssm: A cdssm object defined by the given CDSSM Spec.
     """
     cdssm_spec = CDSSM_LIB[cdssm_spec_name]
 
     # Extract objects from the CDSSM Spec:
     sde_cls = cdssm_spec['sde_cls']
     cdssm_cls = cdssm_spec['cdssm_cls']
-    sde_params = cdssm_spec['sde_params']
-    cdssm_params = cdssm_spec['cdssm_params']
+    filt_smth_str = 'smoothing' if smoothing else 'filtering'
+    
+    sde_params = cdssm_spec[f'{filt_smth_str}_sde_params']
+    cdssm_params = cdssm_spec[f'{filt_smth_str}_cdssm_params']
     T = cdssm_spec['default_T']
 
     # We define the underlying SDE:
@@ -152,9 +185,3 @@ def build_cdssm(cdssm_spec_name):
     # We define the CDSSM:
     cdssm = cdssm_cls(sde, **cdssm_params)
     return cdssm
-
-# We may want to use this covariance matrix to create a mv_ou_4d cdssm spec:
-# phi = 0.3 * nla.cholesky(np.array([[1., 0.9, 0.8, 0.5], 
-#                                     [0.9, 1., 0.6, 0.4],
-#                                     [0.8, 0.6, 1., 0.6],
-#                                     [0.5, 0.4, 0.6, 1.]]))

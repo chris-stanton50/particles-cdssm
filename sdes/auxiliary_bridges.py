@@ -117,7 +117,7 @@ Forward Proposals: Forward Proposals are possible for the hypoelliptic case, but
 Currently not implemented.
 
 
-Auxiliary Bridges: - 3 Integrated SDEs, 3 Twice Integrated SDEs: All based on the Van Der Meulen-Schauer bridge
+Auxiliary Bridges: - 4 Integrated SDEs, 4 Twice Integrated SDEs: All based on the Van Der Meulen-Schauer bridge
 -----------------
 
 (Abstract Base Class: AuxiliaryBridgeBase -> MvAuxiliaryBridge -> HypoellipticAuxiliaryBridge -> IntegratedAuxiliaryBridge -> IntegratedVanDerMeulenSchauerAuxBridge)
@@ -127,6 +127,8 @@ Auxiliary Bridges: - 3 Integrated SDEs, 3 Twice Integrated SDEs: All based on th
 - IntegratedDriftBrownianAuxBridge (H1IDBr): Auxiliary bridge that uses an integrated Brownian motion as the proxy.
 - IntegratedNoDriftBrownianAuxBridge (H1INDBr): Auxiliary bridge that uses an integrated Brownian motion with 0 drift, as the proxy.
 - IntegratedLLOUAuxBridge (H1IOU): Auxiliary Bridge that uses an integrated O-U process as the proxy.
+- IntegratedNoDriftLLOUAuxBridge (H1INDOU): Auxiliary Bridge that uses an integrated O-U process as the proxy. Removes the 0th order term from the Taylor expanison of the drift.
+
 
 (Abstract Base Class: MvAuxiliaryBridge -> HypoellipticAuxiliaryBridge -> TwiceIntegratedAuxiliaryBridge -> TwiceIntegratedVanDerMeulenSchauerAuxBridge)
                                                MvAuxiliaryBridge -> MvVanDerMeulenSchauerAuxiliaryBridge -> TwiceIntegratedVanDerMeulenSchauerAuxBridge
@@ -135,6 +137,7 @@ Auxiliary Bridges: - 3 Integrated SDEs, 3 Twice Integrated SDEs: All based on th
 - TwiceIntegratedDriftBrownianAuxBridge (H2IDBr): Auxiliary bridge that uses an integrated Brownian motion as the proxy.
 - TwiceIntegratedNoDriftBrownianAuxBridge (H2INDBr): Auxiliary bridge that uses an integrated Brownian motion with 0 drift, diagonal diffusion covariance as the proxy.
 - TwiceIntegratedLLOUAuxBridge (H2IOU): Auxiliary Bridge that uses a twice integrated O-U process as the proxy.
+- TwiceIntegratedNoDriftLLOUAuxBridge (H2INDOU): Auxiliary Bridge that uses a twice integrated O-U process as the proxy. Removes the 0th order term from the Taylor expanison of the drift.
 
 
 End Point Proposals: 4 for integrated SDEs, 4 for twice integrated SDEs
@@ -151,9 +154,8 @@ End Point Proposals: 4 for integrated SDEs, 4 for twice integrated SDEs
 
 - TwiceIntegratedNaiveEndPointProposal (H2INDBBrP): E_t | E_{t-1} = e_{t-1} ~ N(0, (t-s)I_d)    
 - TwiceIntegratedDriftBrownianEndPointProposal (H2IDBrP): E_t | E_{t-1} = e_{t-1} ~ N(e_{t-1} + b(0, e_{t-1}), (t-s)\sigma(0, e_{t-1}))
-- TwiceIntegratedIndepOUEndPointProposal (H2IOUP): Transition of a twice integrated O-U process with diagonal elements in B matrix, diagnoal diffusion matrix.
+- TwiceIntegratedIndepOUEndPointProposal (H2IOUP): Transition of a twice integrated O-U process with diagonal elements in B matrix, diagonal diffusion matrix.
 - TwiceIntegratedOUEndPointProposal (H2OUP): Transition of a twice integrated O-U process with diagonal elements in B matrix.
-
 
 
 Also implemmented at the start of the file, are utility classes that are used to add the following methods to the classes above:
@@ -166,9 +168,9 @@ import numpy as np
 import numpy.linalg as nla
 import scipy.stats as stats
 from sdes.numerical_schemes import HypoellipticEulerMaruyama
-from sdes.sdes import SDEBase, SDE, MvSDE, MvEllipticSDE, HypoellipticSDE, BrownianMotion, OrnsteinUhlenbeck, MvIndepBrownianMotion, MvBrownianMotion, MvIndepOrnsteinUhlenbeck, MvOrnsteinUhlenbeck, TimeSwitchingSDE
+from sdes.sdes import SDEBase, SDE, MvSDE, MvEllipticSDE, HypoellipticSDE, BrownianMotion, OrnsteinUhlenbeck, MvIndepBrownianMotion, MvBrownianMotion, MvIndepOrnsteinUhlenbeck, MvOrnsteinUhlenbeck
 from sdes.sdes import HypoellipticSDE, IntegratedSDE, TwiceIntegratedSDE, IntegratedIndepBrownianMotion, IntegratedBrownianMotion, IntegratedIndepOrnsteinUhlenbeck, IntegratedOrnsteinUhlenbeck
-from sdes.sdes import TwiceIntegratedIndepBrownianMotion, TwiceIntegratedBrownianMotion, TwiceIntegratedIndepOrnsteinUhlenbeck, TwiceIntegratedOrnsteinUhlenbeck
+from sdes.sdes import TwiceIntegratedIndepBrownianMotion, TwiceIntegratedBrownianMotion, TwiceIntegratedIndepOrnsteinUhlenbeck, TwiceIntegratedOrnsteinUhlenbeck, TimeSwitchingSDE
 from sdes.path_integrals import log_girsanov, log_delyon_hu, log_van_der_meulen_schauer, mv_log_girsanov, mv_log_delyon_hu, mv_log_van_der_meulen_schauer
 from sdes.tools import log_abs_det, filter_step_var_cov, mv_filter_step_var_cov, MeanAndCov
 from particles.distributions import Normal, VaryingCovNormal
@@ -322,7 +324,7 @@ class BuildLinearSDE(object):
         linear_sde_params = {param: func(t, x) for param, func in linearising_functions.items()}
         if isinstance(self.SDE, MvSDE):
             linear_sde_params.update({'N': self.N, 'dimX': self.SDE.dimX})
-            linear_sde_params = self.check_drift_param(self.check_diffusion_param(linear_sde_params))
+            linear_sde_params = self.check_linear_sde_params(linear_sde_params)
         self.check_matching_condition(linear_sde_params)
         return linear_sde_params
     
@@ -371,7 +373,7 @@ class BuildBrownianLinearSDE(BuildLinearSDE):
         return {'m': m_func, 's': s_func}
 
     def check_drift_param(self, linear_sde_params):
-        if self.drift == False:
+        if not self.drift:
             linear_sde_params['m'] = np.zeros_like(linear_sde_params['m']) if isinstance(self.SDE, MvSDE) else 0.
         return linear_sde_params
 
@@ -386,6 +388,8 @@ class BuildOULinearSDE(BuildLinearSDE):
     TwiceIntegratedSDECls = TwiceIntegratedOrnsteinUhlenbeck
     TwiceIntegratedIndepLinearSDECls = TwiceIntegratedIndepOrnsteinUhlenbeck
 
+    drift=True # We keep the 0th order element of the expansion of the 
+                # drift term, in almost all cases.
     diffusion_param_name = 'phi'
     
     def _get_linearising_functions(self):
@@ -428,6 +432,8 @@ class BuildOULinearSDE(BuildLinearSDE):
     def check_drift_param(self, linear_sde_params):
         if isinstance(self.SDE, MvSDE):
             linear_sde_params['rho'] = self._param_to_diag(linear_sde_params['rho'])
+        if not self.drift: # Remove 0th order term in Taylor expansion of the drift term (currently only used in Hypoelliptic case).
+            linear_sde_params['mu'] = np.zeros_like(linear_sde_params['mu']) if isinstance(self.SDE, MvSDE) else 0.
         return linear_sde_params
 
 class CheckSDE(object):
@@ -546,7 +552,7 @@ class ForwardProposal(ForwardProposalBase, SDE, CheckUnivSDE):
         step = float(X.dtype.names[0])
         X_array = np.stack([self.x_start] + [X[name] for name in X.dtype.names], axis=1) # (N, num+1)
         b_1 = self._b_time_shifted; b_2 = self._b_2; Cov = self.Cov
-        log_girsanov_wgts = self.log_girsanov(X_array, b_1, b_2, Cov, step)
+        log_girsanov_wgts = log_girsanov(X_array, b_1, b_2, Cov, step)
         return log_girsanov_wgts    
 
 # -----------------Brownian Univariate Forward Proposals - 4 Classes -----------------
@@ -1324,14 +1330,22 @@ class TwiceIntegratedNoDriftBrownianAuxBridge(TwiceIntegratedVanDerMeulenSchauer
     sname = 'H2INDBr'
     drift = False
 
-# ---------------Hypoelliptic OU Auxiliary Bridge Proposals: 2 Classes ----------------
+# ---------------Hypoelliptic OU Auxiliary Bridge Proposals: 4 Classes ----------------
 
 class IntegratedLLOUAuxBridge(IntegratedVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
     sname = 'H1IOU'
+
+class IntegratedNoDriftLLOUAuxBridge(IntegratedVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
+    sname = 'H1INDOU'
+    drift=False # Exclude the 0th order term in the Taylor expansion of the drift.
     
 class TwiceIntegratedLLOUAuxBridge(TwiceIntegratedVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
-    sname = 'H2IOU'
+    sname = 'H2INDOU'
 
+class TwiceIntegratedNoDriftLLOUAuxBridge(TwiceIntegratedVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
+    sname = 'H2INDOU'
+    drift=False # Exclude the 0th order term in the Taylor expansion of the drift.
+    
 
 # ---------------Hypoelliptic End Point Proposals:  ----------------
 
@@ -1400,8 +1414,8 @@ twice_integrated_forward_proposals = [] # Not implemented yet.
 # Auxiliary Bridges
 univ_auxiliary_bridges = [DelyonHuAuxBridge,  NoDriftBrownianAuxBridge, DriftBrownianAuxBridge, LocalLinearOUAuxBridge]
 mv_auxiliary_bridges = [MvDelyonHuAuxBridge, MvNoDriftBrownianAuxBridge, MvDriftBrownianAuxBridge, MvLLOUAuxBridge]
-integrated_auxiliary_bridges = [IntegratedDriftBrownianAuxBridge, IntegratedNoDriftBrownianAuxBridge, IntegratedLLOUAuxBridge]
-twice_integrated_auxiliary_bridges = [TwiceIntegratedDriftBrownianAuxBridge, TwiceIntegratedNoDriftBrownianAuxBridge, TwiceIntegratedLLOUAuxBridge]
+integrated_auxiliary_bridges = [IntegratedDriftBrownianAuxBridge, IntegratedNoDriftBrownianAuxBridge, IntegratedLLOUAuxBridge, IntegratedNoDriftLLOUAuxBridge]
+twice_integrated_auxiliary_bridges = [TwiceIntegratedDriftBrownianAuxBridge, TwiceIntegratedNoDriftBrownianAuxBridge, TwiceIntegratedLLOUAuxBridge, TwiceIntegratedNoDriftLLOUAuxBridge]
 
 # End Point Proposals
 univ_end_point_proposals = [NaiveEndPointProposal, EulerMaruyamaEndPointProposal, OUEndPointProposal]

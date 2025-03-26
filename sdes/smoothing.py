@@ -1,155 +1,148 @@
 import numpy as np
-import time
-import types
+import functools
 
-from particles.core import SMC
+from particles.smoothing import ParticleHistory
+import particles.smoothing as sm
 import particles.resampling as rs
 
-from sdes.feynman_kac import CDSSM_FeynmanKac, CDSSM_SMC
+from sdes.feynman_kac import ReparameterisedDA
 
 # method for a ParticleHistory object: generates samples by tracing back the ancestral path.
 # We bind this to the ParticleHistory class, so that we can call it as a method.
 
-def backward_sampling_geneaology(self, M):
-    """
-    Extract M full trajectories from the particle history.
-
-    M final states are chosen randomly, then the corresponding trajectory
-    is constructed backwards, until time t=0.
-    """
-    idx = self._init_backward_sampling(M)
-    for t in reversed(range(self.T - 1)):
-        idx[t, :] = self.A[t + 1][idx[t + 1, :]]
-    return self._output_backward_sampling(idx)
-
-def backward_sampling_geneaology_idx(self, M, idx = None):
-    """
-    Extract M full trajectories from the particle history.
-
-    M final states are chosen randomly, then the corresponding trajectory
-    is constructed backwards, until time t=0.
-    """
-    idx = self._init_backward_sampling(M) if idx is None else idx.copy()
-    for t in reversed(range(self.T - 1)):
-        idx[t, :] = self.A[t + 1][idx[t + 1, :]]
-    return idx
-
-def backward_sampling_ON2_idx(self, M, idx=None):
-    """
-    Extract M full trajectories from the particle history.
-
-    M final states are chosen randomly, then the corresponding trajectory
-    is constructed backwards, until time t=0.
-    """
-    idx = self._init_backward_sampling(M) if idx is None else idx.copy()
-    for m in range(M):
-        for t in reversed(range(self.T - 1)):
-            lwm = self.wgts[t].lw + self.fk.logpt(
-                t + 1, self.X[t], self.X[t + 1][idx[t + 1, m]]
-            )
-            idx[t, m] = rs.multinomial_once(rs.exp_and_normalise(lwm))
-    return idx
-
-def backward_sampling_mcmc_idx(self, M, nsteps=1, idx=None):
-    """
-    Extract M full trajectories from the particle history.
-
-    M final states are chosen randomly, then the corresponding trajectory
-    is constructed backwards, until time t=0.
-    """
-    idx = self._init_backward_sampling(M) if idx is None else idx.copy()
-    for t in reversed(range(self.T - 1)):
-        xn = self.X[t + 1][idx[t + 1, :]]
-        idx[t, :] = self.A[t + 1][idx[t + 1, :]]
-        for i in range(nsteps):
-            # IID version, otherwise introduces a bias!
-            prop = rs.multinomial_iid(self.wgts[t].W, M=M)
-            lpr_acc = (self.fk.logpt(t + 1, self.X[t][prop], xn)
-                        - self.fk.logpt(t + 1, self.X[t][idx[t, :]], xn))
-            lu = np.log(np.random.rand(M))
-            idx[t, :] = np.where(lu < lpr_acc, prop, idx[t, :])
-    return idx
-
-def add_hist_methods(hist):
-    hist.backward_sampling_geneaology = types.MethodType(backward_sampling_geneaology, hist)
-    hist.backward_sampling_geneaology_idx = types.MethodType(backward_sampling_geneaology_idx, hist)
-    hist.backward_sampling_ON2_idx = types.MethodType(backward_sampling_ON2_idx, hist)
-    hist.backward_sampling_mcmc_idx = types.MethodType(backward_sampling_mcmc_idx, hist)
-
-
-method_dict = {"geneaology": 'backward_sampling_geneaology',
-               "FFBS_ON2": 'backward_sampling_ON2',
-               "FFBS_purereject": 'backward_sampling_reject',
-               "FFBS_hybrid": 'backward_sampling_reject',
-               "FFBS_MCMC": 'backward_sampling_mcmc'
-               }
-
-def modif_smoothing_worker(
-    method=None, N=100, fk=None, num=10, smc_cls=CDSSM_SMC, add_funcs=None):
-    """Modified version of 'smoothing_worker' from particles.smoothing.
-    Removed two-filter smoothing, enabled evaluation of multiple additive functions.
-
-    This worker may be used in conjunction with utils.multiplexer in order to
-    run in parallel off-line smoothing algorithms.
-
-    Parameters
-    ----------
-    method : string
-         ['geneaology', 'FFBS_purereject', 'FFBS_hybrid', FFBS_MCMC', 'FFBS_ON2']
-    N : int
-        number of particles
-    fk : Feynman-Kac object
-        The Feynman-Kac model for the forward filter
-    num : int 
-        Number of imputed points to use if fk is an instance of CDSSM_FeynmanKac
-        and running CDSSM_SMC.
-    smc_cls: The smc class to use: set to either CDSSM_SMC or SMC
-    add_funcs : function, with signature (t, x, xf)
-        list of additive functions, at time t, for particles x=x_t and xf=x_{t+1}
-
-
-    Returns
-    -------
-    a dict with fields:
+def generate_hist_obj(option, smc):
+    if option is True and hasattr(smc.fk, 'cdssm'):
+        return CDSSM_ParticleHistory(smc.fk, smc.qmc)
+    elif option is True:
+        return ParticleHistory(smc.fk, smc.qmc)
+    elif option is False:
+        return None
+    elif callable(option):
+        return sm.PartialParticleHistory(option)
+    elif isinstance(option, int) and option >= 0:
+        return sm.RollingParticleHistory(option)
+    else:
+        raise ValueError("store_history: invalid option")
     
-    * est: a ndarray of length T
-    * cpu_time
+def post_transform(method):
+    @functools.wraps(method)
+    def post_transform_method(self, *args, **kwargs):
+        out = method(self, *args, **kwargs)
+        if isinstance(self.fk, ReparameterisedDA):
+            out = self.fk.transform_W_to_X(out)
+        return out
+    return post_transform_method
 
-    Notes
-    -----
-    'FFBS_hybrid' is the hybrid method that makes at most N attempts to
-    generate an ancestor using rejection, and then switches back to the
-    standard (expensive method). On the other hand, 'FFBS_purereject' is the
-    original rejection-based FFBS method, where only rejection is used. See Dau
-    & Chopin (2022) for a discussion.
+class ParticleHistory(sm.ParticleHistory):
     """
-    T = fk.T
-    fk_string = fk.__class__.__name__ if not isinstance(fk, CDSSM_FeynmanKac) else fk.sname
-    dimX = fk.cdssm.dimX if isinstance(fk, CDSSM_FeynmanKac) else fk.ssm.cdssm.dimX
-    ests = {add_func_name: np.zeros((T, dimX)) for add_func_name in add_funcs.keys()}
-    if smc_cls is CDSSM_SMC:
-        pf = CDSSM_SMC(fk=fk, N=N, num=num, store_history=True)
-    else:
-        pf = SMC(fk=fk, N=N, store_history=True)
-    print(f'Running fk model: {fk_string}')
-    tic = time.perf_counter()
-    pf.run()
-    # Bind the backward sampling geneaology method to the ParticleHistory object
-    pf.hist.backward_sampling_geneaology = types.MethodType(backward_sampling_geneaology, pf.hist)
-    if method in method_dict.keys():
-        bound_smoothing_method = getattr(pf.hist, method_dict[method])
-        if method == "FFBS_purereject":
-            z = bound_smoothing_method(N, max_trials=N * 10 ** 9)
-        else:
-            z = bound_smoothing_method(N)
-        # Once we have the backward samples, we can post-process them however we want!
-        # Don't feel restricted here!
-        for add_func_name, add_func in add_funcs.items(): 
-            ests[add_func_name][0] = np.mean(add_func(0, None, z[0]), axis=0) # add_func(t, x, xf) ->  (M, dimX)/ (M, ) -> (dimX, )/scalar            
-            for t in range(1, T):
-                ests[add_func_name][t] = np.mean(add_func(t, z[t-1], z[t]), axis=0) # add_func(t, x, xf) ->  (M, dimX)/ (M, ) -> (dimX, )/scalar
-    else:
-        print("smoothing_worker: no such method?")
-    cpu_time = time.perf_counter() - tic
-    print(method + " took %.2f s for N=%i" % (cpu_time, N))
-    return {"ests": ests, "cpu": cpu_time}
+    New version of `ParticleHistory` with additional methods for backward sampling.
+    """
+    def backward_sampling_genealogy(self, M):
+        """
+        Extract M full trajectories from the particle history.
+
+        M final states are chosen randomly, then the corresponding trajectory
+        is constructed backwards, until time t=0.
+        """
+        idx = self._init_backward_sampling(M)
+        for t in reversed(range(self.T - 1)):
+            idx[t, :] = self.A[t + 1][idx[t + 1, :]]
+        return self._output_backward_sampling(idx)
+
+    def backward_sampling_genealogy_idx(self, M, idx = None):
+        """
+        """
+        idx = self._init_backward_sampling(M) if idx is None else idx.copy()
+        for t in reversed(range(self.T - 1)):
+            idx[t, :] = self.A[t + 1][idx[t + 1, :]]
+        return idx
+
+    def backward_sampling_ON2_idx(self, M, idx=None):
+        """
+        """
+        idx = self._init_backward_sampling(M) if idx is None else idx.copy()
+        for m in range(M):
+            for t in reversed(range(self.T - 1)):
+                lwm = self.wgts[t].lw + self.fk.logpt(
+                    t + 1, self.X[t], self.X[t + 1][idx[t + 1, m]]
+                )
+                idx[t, m] = rs.multinomial_once(rs.exp_and_normalise(lwm))
+
+        return idx
+
+    def backward_sampling_mcmc_idx(self, M, nsteps=1, idx=None):
+        """
+        Extract M full trajectories from the particle history.
+
+        M final states are chosen randomly, then the corresponding trajectory
+        is constructed backwards, until time t=0.
+        """
+        idx = self._init_backward_sampling(M) if idx is None else idx.copy()
+        for t in reversed(range(self.T - 1)):
+            xn = self.X[t + 1][idx[t + 1, :]]
+            idx[t, :] = self.A[t + 1][idx[t + 1, :]]
+            for i in range(nsteps):
+                # IID version, otherwise introduces a bias!
+                prop = rs.multinomial_iid(self.wgts[t].W, M=M)
+                lpr_acc = (self.fk.logpt(t + 1, self.X[t][prop], xn)
+                            - self.fk.logpt(t + 1, self.X[t][idx[t, :]], xn))
+                lu = np.log(np.random.rand(M))
+                idx[t, :] = np.where(lu < lpr_acc, prop, idx[t, :])
+        return idx
+
+class CDSSM_ParticleHistory(ParticleHistory):
+    """
+    New version of ParticleHistory with additional methods for backward sampling.
+    """
+
+    @post_transform
+    def extract_one_trajectory(self):
+        return super().extract_one_trajectory()
+
+    @post_transform
+    def backward_sampling_genealogy(self, M):            
+        return super().backward_sampling_genealogy(M)
+    
+    @post_transform
+    def backward_sampling_ON2(self, M):
+        return super().backward_sampling_ON2(M)
+        
+    @post_transform
+    def backward_sampling_mcmc(self, M, nsteps=1):
+        return super().backward_sampling_mcmc(M, nsteps)
+
+    def _backward_sampling_ON2(self, M):
+        """
+        Generate trajectories without post-transform: used in MCMC algorithms (PG/PGBS)
+        """
+        return super().backward_sampling_ON2(M)
+    
+    def _extract_one_trajectory(self):
+        """
+        Generate trajectory without post-transform: used in MCMC algorithms (PG/PGBS)
+        """
+        return super().extract_one_trajectory()
+
+    def backward_sampling_reject(self, M, max_trials=None):
+        raise NotImplementedError("Method `backward_sampling_reject` not implemented for CDSSMs")
+    
+    def backward_sampling_qmc(self, M):
+        raise NotImplementedError("Method `backward_sampling_qmc` not implemented for CDSSMs")
+    
+    def two_filter_smoothing(self, 
+                             t,
+                             info,
+                             phi,
+                             loggamma,
+                             linear_cost=False,
+                             return_ess=False,
+                             modif_forward=None,
+                             modif_info=None
+                             ):
+        raise NotImplementedError("Method `two_filter_smoothing` not implemented for CDSSMs")
+
+# def add_hist_methods(hist):
+#     hist.backward_sampling_geneaology = types.MethodType(backward_sampling_geneaology, hist)
+#     hist.backward_sampling_geneaology_idx = types.MethodType(backward_sampling_geneaology_idx, hist)
+#     hist.backward_sampling_ON2_idx = types.MethodType(backward_sampling_ON2_idx, hist)
+#     hist.backward_sampling_mcmc_idx = types.MethodType(backward_sampling_mcmc_idx, hist)

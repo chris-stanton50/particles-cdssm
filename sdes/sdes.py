@@ -2,8 +2,16 @@
 """
 SDEs module
 
-Implemented classes:
+Define objects that represent the solutions of stochastic diffeeential equations (SDEs).
 
+To build an SDE, subclass one of the following:
+
+- SDE: For SDEs such that dimX=dimW=1
+- MvEllipticSDE: For any other SDE with dimX=dimW>1 and an invertible diffusion coefficient
+- MvIntegratedSDE: For SDEs with dimX // 2 = dimW. The smooth component is an integral of hte rough component.
+- MvTwiceIntegratedSDE: For SDEs with dimX // 2 = dimW. The smooth components are twice integrals of the rough component. 
+
+In further development, one could 
 Examples of Univariate SDEs:
 
 1. SinDiffusion: SDE with a sinusoidal drift and constant diffusion
@@ -60,29 +68,14 @@ class SDEBase(object):
     approach to discretising integrals, is implemented as the method 
     `transform_W_to_X'. 
 
-    A (non-degenerate) 1D SDE is always elliptic, so there also exists a function 
-    from the SDE solution to the driving noise. This function is implemented,
-    again through a natural discretisation, using the method `transform_X_to_W'.
+    For elliptic SDEs, there also exists a function from the SDE solution to the
+    driving noise. This function is implemented, again through a natural 
+    discretisation, using the method `transform_X_to_W'.
 
     All 3 of these methods are implemented in a vectorised form, (see the functions
     `X_to_W_step', `W_to_X_step' and 'univ_simulation_step'). In practice, this 
     means that one can say generate N simulations from N different starting points
     from a start time t_start to an end time t_end, using a single call to the method.
-
-    Example:
-
-    class OrnsteinUhlenbeck(SDE):
-
-        default_params = {'theta': 1.,
-                        'mu': 0.,
-                        'sigma': 1.
-                        }
-        
-        def b(self, x):
-            return self.theta * (self.mu - x)
-        
-        def sigma(self, x):
-            return self.sigma
     """
     def __init__(self, **kwargs):
         if hasattr(self, 'default_params'):
@@ -100,48 +93,6 @@ class SDEBase(object):
     def _error_msg(self, method):
         return ('method ' + method + ' not implemented in SDE class %s' %
                 self.__class__.__name__)
-
-    def b(self, t: float, x):
-        """
-        Placeholder for drift coeffciient of an SDE
-        Input a scalar/1D ndarray for x
-        Output a scalar/1D ndarray
-        respectively
-        """
-        raise NotImplementedError(self._error_msg('b'))
-
-    def sigma(self, t: float, x):
-        """
-        Placeholder for the diffusion coefficient of the SDE
-        Input a scalar/1D ndarray for x
-        Output a scalar/1D ndarray
-        respectively
-        """
-        raise NotImplementedError(self._error_msg('sigma'))
-
-    def db(self, t: float, x):
-        """
-        Placeholder for first derivative w.r.t x of the diffusion coefficient of the SDE
-        Input a scalar/1D ndarray for x
-        Output a scalar/1D ndarray
-        respectively
-        """
-        return NotImplementedError(self._error_msg('db'))
-
-    def dsigma(self, t: float, x):
-        """
-        Placeholder for first derivative w.r.t x of the diffusion coefficient of the SDE
-        Input a scalar/1D ndarray for x
-        Output a scalar/1D ndarray
-        respectively
-        """
-        raise NotImplementedError(self._error_msg('dsigma'))
-
-    def Cov(self, t: float, x: float):
-        return self.sigma(t, x) ** 2
-
-    def dCov(self, t: float, x: float):
-        return 2 * self.sigma(t, x) * self.dsigma(t, x)
 
     def simulate(self, size: int, x_start=None, t_start: float =0., t_end: float =1., num=5) -> np.ndarray:
         """
@@ -218,7 +169,119 @@ class SDE(SDEBase):
     dimX = 1
     dimW = 1
     numerical_scheme_cls = EulerMaruyama
+
+    def b(self, t: float, x: np.ndarray):
+        """
+        **Mandatory Function**
+        Placeholder for drift coeffciient of an SDE
+
+        Inputs
+        ------------
+        t (float): time
+        x (float/np.ndarray): float or (N,) array of current states
     
+        Returns
+        ------------
+        b (float/np.ndarray): float or (N,) array of drift coefficient values
+        """
+        raise NotImplementedError(self._error_msg('b'))
+
+    def sigma(self, t: float, x):
+        """
+        **Mandatory Function**
+        Placeholder for drift coefficient of an SDE
+
+        Inputs
+        ------------
+        t (float): time
+        x (float/np.ndarray): float or (N,) array of current states
+    
+        Returns
+        ------------
+        sigma (float/np.ndarray): float or (N,) array of diffusion coefficient values
+        """
+        raise NotImplementedError(self._error_msg('sigma'))
+
+    def db(self, t: float, x):
+        """
+        **Optional Function**
+        Placeholder for derivative of the drift coefficient of an SDE.
+        Used in higher order numerical schemes, and in finding coefficients 
+        of 1st order linear SDE approximations.
+
+        Inputs
+        ------------
+        t (float): time
+        x (float/np.ndarray): float / (N,) array of current states
+    
+        Returns
+        ------------
+        db (float/np.ndarray): float / (N,) array of db values
+        """
+        return NotImplementedError(self._error_msg('db'))
+
+    def dsigma(self, t: float, x):
+        """
+        **Optional Function**
+        Placeholder for derivative of the diffusion coefficient of an SDE.
+        Used in higher order numerical schemes.
+
+        Inputs
+        ------------
+        t (float): time
+        x (float/np.ndarray): float / (N,) array of current states
+    
+        Returns
+        ------------
+        dsigma (float/np.ndarray): float / (N,) array of db values
+        """
+        raise NotImplementedError(self._error_msg('dsigma'))
+
+    def Cov(self, t: float, x: float):
+        return self.sigma(t, x) ** 2
+
+    def dCov(self, t: float, x: float):
+        return 2 * self.sigma(t, x) * self.dsigma(t, x)
+
+    def transition_dist(self, s: float, t: float, x_s: np.ndarray):
+        """
+        **Optional Function**
+        Placeholder for transition density of the SDE. In general, this is 
+        unknown, but for some SDEs, it can be computed exactly.
+        Used to run SMC algorithms on SDEs with Exact Proposals 
+        see the class (sdes.state_space_models.DiscreteDiscreteSSM)
+
+        Inputs
+        ------------
+        s (float): start time
+        t (float): end time
+        x_s (float/np.ndarray): float / (N,) array of current states
+    
+        Returns
+        ------------
+        transition_dist (particles.distributions.ProbDist): ProbDist object representing the transition density of x_t|x_s.
+        """
+        raise NotImplementedError(self._error_msg('transition_dist'))
+    
+    def optimal_proposal_dist(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: float, sigmaY: float):
+        """
+        **Optional Function**
+        Placeholder for derivative of the diffusion coefficient of an SDE.
+        Used in higher order numerical schemes.
+
+        Inputs
+        ------------
+        s (float): start time
+        t (float): end time
+        x_s (float/np.ndarray): float / (N,) array of current states
+        y_t (float/np.ndarray): float / (1,) array for the observation
+    
+        Returns
+        ------------
+        optimal_dist (particles.distributions.ProbDist): ProbDist object representing the optimal proposal for x_t|x_s.
+        """
+        raise NotImplementedError(self._error_msg('optimal_proposal_dist'))
+
 #---------------------------------- Examples of non-linear, Univariate SDEs ----------------------------------
 
 class SinDiffusion(SDE):
@@ -303,26 +366,38 @@ class LinearSDE(SDE):
 
     $$dX_t = [A(t) + B(t)X_t] dt + C(t)dW_t$$
 
-    Includes the methods
-    'log_px'
-    'grad_log_px'
-    'grad_log_py'
-    'exact_simulate'
-    'transition_dist'
+
+    The following methods from `SDE` are automatically defined:
+    
+    'b'
+    'sigma'
+    'db'
+    'dsigma'    
+    'transition_dist' 
     'optimal_proposal_dist'
 
-    Linear SDEs have a tractable Gaussian transition density, and so can be simulated from exactly:
+    Includes the additional methods:
+    'log_px' -  Log transition density of X(t) | X(s).
+    'grad_log_px' - Grad of log transition density of X(t) | X(s).
+    'grad_log_py' - Grad of log transition density of Y_t | X(s). Assumes a linear Gaussian observation density. 
+    'exact_simulate' - Exact simulation from the Linear SDE
+
+    Many of the above new methods depend on the transition density of the linear SDE, which is 
+    linear, Gaussian, given by:
 
     p_{s,t}(x_t| x_s) = \phi(x_t, a x_s + b, v)
 
     a, b and v correspond to _a, _b and _v methods.
 
-    The _a, _b and _v methods need to be implemented for a given subclass of LinearSDE. 
-    Doing so defines the transition density of the Linear SDE, thus enabling exact sampling,
-    and evaluation of the transition density.
-
-    For the general linear SDE the quantities involve evaluating various integrals.
-    We may come back to implement this in the future.
+    To subclass a linear SDE, we need to define the following methods:
+    
+    'A(t)': Additive constant in the drift coefficient
+    'B(t)': Coefficient of x in the Drift coefficient
+    'C(t)': Diffusion coefficient
+    
+    '_a(s, t)': Coefficient of x_s in transition density mean function.
+    '_b(s, t)': Additive constant in transition density mean function.
+    '_v(s, t)': Transition density variance
     """
     exact_scheme = LinearExact
 
@@ -428,37 +503,8 @@ class LinearSDE(SDE):
         # y_t: (1, ) / (1, dimY)
         # eta_sq: float / (dimY, dimY)
         """
-        dimY = y_t.shape[1] if type(y_t) is np.ndarray and y_t.ndim > 1 else 1
-        if dimY == 1:
-            v = (LY**2)*self._v(s, t) + (sigmaY ** 2)
-            return grad_log_linear_gaussian(x_s, y_t, LY*self._a(s, t), LY*self._b(s, t), v)
-        else:
-            """
-            Gradient of the log transition density of Y_t | X(s), where Y_t | E_t=e_t \sim N(Le_t, \sigma_Y \sigma_Y^T)
-            
-            To do: Think about feeding in the Cholesky decomposition instead of the covariance to save compute time.
-            # s: float
-            # t: float
-            # x_s: float/ (N, )
-            # y_t: (1, dimY)
-            # LY: (dimY, 1)
-            # sigmaY: (dimY, dimY)
-            
-            _a(s, t) -> (N, 1 , 1)
-            _b(s, t) -> (N, 1)
-            _v(s, t) -> (N, 1, 1)
-            """
-            x_s = np.ndarray([x_s]).reshape((-1, 1)) if type(x_s) is float else x_s.reshape((-1, 1))
-            N = x_s.shape[0]
-            _a = np.array(self._a(s, t)).reshape((N, 1, 1))
-            _b = np.array(self._b(s, t)).reshape((N, 1))
-            _v = np.array(self._v(s, t)).reshape((N, 1, 1))
-            _a = np.einsum('ij,hjk->hik', LY, _a) #(N, dimY, dimX)
-            _b = (LY @ _b.T).T #(N, dimY)
-            V_L_T = np.einsum('ijk,kl->ijl', _v, LY.T) #(N, dimX, dimY)
-            L_V_L_T = np.einsum('ij,hjk->hik', LY, V_L_T) #(N, dimY, dimY)
-            V = L_V_L_T + sigmaY @ sigmaY.T #(N, dimY, dimY)
-            return mv_grad_log_linear_gaussian(x_s, y_t, _a, _b, V)
+        v = (LY**2)*self._v(s, t) + (sigmaY ** 2)
+        return grad_log_linear_gaussian(x_s, y_t, LY*self._a(s, t), LY*self._b(s, t), v)
 
     def grad_grad_log_py(self, s: float, t: float, y_t: np.ndarray, LY: float, sigmaY: float):
         """
@@ -469,32 +515,8 @@ class LinearSDE(SDE):
         LY: float / (dimY, 1)
         sigmaY: float / (dimY, dimY)
         """
-        dimY = y_t.shape[1] if type(y_t) is np.ndarray and y_t.ndim > 1 else 1
-        if dimY == 1:
-            v = (LY**2)*self._v(s, t) + sigmaY ** 2
-            return grad_grad_log_linear_gaussian(self._a(s, t), self._b(s, t), v)
-        else:
-            """
-            The hessian of the log of a linear Gaussian transition density w.r.t x_s 
-            X_t | X_s = x_s \sim \mathcal{N}(A x_s + b, S)
-
-            $$ \nabla_{x_s} \nabla_{x_s}^T \log(p_{s, t}(x_t|x_s)) = -A^T S^{-1} A $$
-            
-            Standard dimensions of the inputs:
-
-            x_s (N, dimX)
-            x_t (N, dimY)
-            A (N, dimY, dimX)
-            b (N, dimY)
-            S (N, dimY, dimY)
-            
-            Dimension of output: 
-            (N, dimX)
-            """
-            _a = np.array(self._a(s, t)).reshape((1, 1, 1))
-            _b = np.array(self._b(s, t)).reshape((1, 1))
-            _v = np.array(self._v(s, t)).reshape((1, 1, 1))
-            return mv_grad_grad_log_linear_gaussian(_a, _b, _v)
+        v = (LY**2)*self._v(s, t) + sigmaY ** 2
+        return grad_grad_log_linear_gaussian(self._a(s, t), self._b(s, t), v)
     
     def _vec_grad_log_py(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: float, sigmaY: float):
         """
@@ -528,10 +550,10 @@ class LinearSDE(SDE):
         """
         Proposal for the end point using the exact distribution $E_t | E_{t-1}=e_{t-1}, Y_t = y_t$ from a Linear SDE.
         No longer used in the CDSSM SMC algorithms, but kept for reference.
-        x_s: float / (N, )
-        y_t: (1, )/ (1, dimY)
-        LY: float / (dimY, 1)
-        sigmaY: float / (dimY, dimY)
+        x_s: (N, )
+        y_t: (1, )
+        LY: float
+        sigmaY: float
         """    
         a = self._a(s, t); b = self._b(s, t); v = self._v(s,t)
         pred = MeanAndCov(a*x_s + b, v)
@@ -734,7 +756,6 @@ class TVOrnsteinUhlenbeck(OrnsteinUhlenbeck):
     Where C(t) = \phi_1 for t \in [0,1]
                = \phi_2 for t > 1 
     """
-
     default_params = {'rho': 0.2,
                       'mu': 0.,
                       'phi_1': 0.3,
@@ -835,31 +856,134 @@ class MvSDE(SDEBase):
     
     # Simulation still possible for hypoelliptic diffusions.
     numerical_scheme_cls = MvEulerMaruyama
-        
+
+    def transition_dist(self, s: float, t: float, x_s: np.ndarray):
+        """
+        **Optional Function**
+        Placeholder for transition density of the SDE. In general, this is 
+        unknown, but for some SDEs, it can be computed exactly.
+        Used to run SMC algorithms on SDEs with Exact Proposals 
+        see the class (sdes.state_space_models.DiscreteDiscreteSSM)
+
+        Inputs
+        ------------
+        s (float): start time
+        t (float): end time
+        x_s (np.ndarray): (N, dimX) array of current states
+    
+        Returns
+        ------------
+        transition_dist (particles.distributions.ProbDist): Mv ProbDist object representing the transition density of x_t|x_s.
+        """
+        raise NotImplementedError(self._error_msg('transition_dist'))
+    
+    def optimal_proposal_dist(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: float, sigmaY: float):
+        """
+        **Optional Function**
+        Placeholder for derivative of the diffusion coefficient of an SDE.
+        Used in higher order numerical schemes.
+
+        Inputs
+        ------------
+        s (float): start time
+        t (float): end time
+        x_s (np.ndarray): (N, dimX) array of current states
+        y_t (np.ndarray): (1, dimY) array for the observation
+    
+        Returns
+        ------------
+        optimal_dist (particles.distributions.ProbDist): Mv ProbDist object representing the optimal proposal for x_t|x_s.
+        """
+        raise NotImplementedError(self._error_msg('optimal_proposal_dist'))
+            
     def Cov(self, t: float, x: np.ndarray):
         """  
-            Input an array-like of shape (N, dimX)
-            Output an ndarray of shape (N, dimX, dimX)
+        Input an array-like of shape (N, dimX)
+        Output an ndarray of shape (N, dimX, dimX)
         """
         rt_cov = self.sigma(t, x)
         rt_cov_T = np.einsum('ijk->ikj', rt_cov)
-        return np.einsum('ijk,ikl->ijl', rt_cov, rt_cov_T)
+        return rt_cov @ rt_cov_T
 
+    def dCov(self, t: float, x: float):
+        #     # self.sigma(t, x) (N, dimX, dimX)
+        #     return np.einsum('ijkl,',self.sigma(t, x), self.dsigma(t, x)) + np.einsum(''self.dsigma(t, x), self.sigma(t, x))
+        raise NotImplementedError(self._error_msg('dCov'))
+    
     @property
     def dimW(self):
         return self.dimX // (self.n_smooth + 1)
-
-    # def dCov(self, t, x):
-    #     # self.sigma(t, x) (N, dimX, dimX)
-    #     return np.einsum('ijkl,',self.sigma(t, x), self.dsigma(t, x)) + np.einsum(''self.dsigma(t, x), self.sigma(t, x))
 
 class MvEllipticSDE(MvSDE):
 
     n_smooth = 0
     
-    @property
-    def dimW(self):
-        return self.dimX
+    def b(self, t: float, x: np.ndarray):
+        """
+        **Mandatory Function**
+        Placeholder for drift coeffciient of an SDE
+
+        Inputs
+        ------------
+        t (float): time
+        x (np.ndarray): (N, dimX) array of current states
+    
+        Returns
+        ------------
+        b (np.ndarray): (N, dimX) array of drift coefficient values
+        """
+        raise NotImplementedError(self._error_msg('b'))
+
+    def sigma(self, t: float, x):
+        """
+        **Mandatory Function**
+        Placeholder for drift coefficient of an SDE
+
+        Inputs
+        ------------
+        t (float): time
+        x (np.ndarray): (N, dimX) array of current states
+    
+        Returns
+        ------------
+        sigma (np.ndarray): (N, dimX, dimW) array of diffusion coefficient values
+        """
+        raise NotImplementedError(self._error_msg('sigma'))
+
+    def db(self, t: float, x):
+        """
+        **Optional Function**
+        Placeholder for derivative of the drift coefficient of an SDE.
+        Used in higher order numerical schemes, and in finding coefficients 
+        of 1st order linear SDE approximations.
+
+        Inputs
+        ------------
+        t (float): time
+        x (np.ndarray): (N, dimX) array of current states
+    
+        Returns
+        ------------
+        db (np.ndarray): (N, dimX, dimX) array of db values
+        """
+        return NotImplementedError(self._error_msg('db'))
+
+    def dsigma(self, t: float, x):
+        """
+        **Optional Function**
+        Placeholder for derivative of the diffusion coefficient of an SDE.
+        Used in higher order numerical schemes.
+
+        Inputs
+        ------------
+        t (float): time
+        x (np.ndarray): (N, dimX) array of current states
+    
+        Returns
+        ------------
+        dsigma (np.ndarray): (N, dimX, dimW, dimX) array of dsigma values
+        """
+        raise NotImplementedError(self._error_msg('dsigma'))
 
 class HypoellipticSDE(MvSDE):
 
@@ -887,32 +1011,6 @@ class HypoellipticSDE(MvSDE):
     @property
     def dimS(self):
         return self.dimX - self.dimW
-
-    def b_rough(self, t, x):
-        """
-        Drift coefficient restricted to the rough component:
-        may also depend on the smooth component.
-        
-        Used to parameterise integrated Linear SDEs within particle algorithms.
-        Output should be of the form (N, dimW)
-        """
-        raise NotImplementedError(self._error_msg('b_rough'))
-
-    def db_rough(self, t, x):
-        """
-        First derivative of the drift, restricted to the rough component
-        (i.e we take each rough component and evaluate its derivative w.r.t its rough component)
-
-        Output should be of the form (N, dimW, dimW)
-        """
-        raise NotImplementedError(self._error_msg('db_rough'))
-    
-    def sigma_rough(self, t, x):
-        """
-        Diffusion coefficient restricted to the rough component:
-        Output should be of the form (N, dimW, dimW)
-        """
-        raise NotImplementedError(self._error_msg('sigma_rough'))
     
     def b(self, t, x):
         return np.concatenate([x[:, -self.dimS:], self.b_rough(t, x)], axis=1)
@@ -947,6 +1045,32 @@ class IntegratedSDE(HypoellipticSDE):
     """
     n_smooth = 1
 
+    def b_rough(self, t, x):
+        """
+        Drift coefficient restricted to the rough component:
+        may also depend on the smooth component.
+        
+        Used to parameterise integrated Linear SDEs within particle algorithms.
+        Output should be of the form (N, dimW)
+        """
+        raise NotImplementedError(self._error_msg('b_rough'))
+
+    def db_rough(self, t, x):
+        """
+        First derivative of the drift, restricted to the rough component
+        (i.e we take each rough component and evaluate its derivative w.r.t its rough component)
+
+        Output should be of the form (N, dimW, dimW)
+        """
+        raise NotImplementedError(self._error_msg('db_rough'))
+    
+    def sigma_rough(self, t, x):
+        """
+        Diffusion coefficient restricted to the rough component:
+        Output should be of the form (N, dimW, dimW)
+        """
+        raise NotImplementedError(self._error_msg('sigma_rough'))
+
 class TwiceIntegratedSDE(HypoellipticSDE):
     """
     To define a non-linear Twice Integrated (Hypoelliptic) SDE:
@@ -964,6 +1088,45 @@ class TwiceIntegratedSDE(HypoellipticSDE):
     
     """
     n_smooth = 2
+    
+    def b_rough(self, t, x):
+        """
+        Drift coefficient restricted to the rough component:
+        may also depend on the smooth component.
+
+        Inputs
+        ------------
+        t (float): time
+        x (np.ndarray): (N, dimX) array of current states
+        
+        Returns
+        ------------
+        b_rough (np.ndarray): (N, dimW) array of rough drift coefficient values
+        """
+        raise NotImplementedError(self._error_msg('b_rough'))
+
+    def db_rough(self, t, x):
+        """
+        Drift coefficient restricted to the rough component:
+        may also depend on the smooth component.
+
+        Inputs
+        ------------
+        t (float): time
+        x (np.ndarray): (N, dimX) array of current states
+        
+        Returns
+        ------------
+        db_rough (np.ndarray): (N, dimW) array of rough drift coefficient values
+        """
+        raise NotImplementedError(self._error_msg('db_rough'))
+    
+    def sigma_rough(self, t, x):
+        """
+        Diffusion coefficient restricted to the rough component:
+        Output should be of the form (N, dimW, dimW)
+        """
+        raise NotImplementedError(self._error_msg('sigma_rough'))
 
 #--------------------------------------------- Examples of Multivariate SDEs -------------------------------------------
 
@@ -1186,7 +1349,6 @@ class MvLinearSDE(MvSDE):
         # t: float
         # x_s: (N, dimX)
         # x_t: (N, dimX)
-
         return mv_grad_log_linear_gaussian(x_s, x_t, self._a(s, t), self._b(s, t), self._v(s, t))
 
     def grad_grad_log_px(self, s: float, t: float):
@@ -1196,13 +1358,12 @@ class MvLinearSDE(MvSDE):
         """
         Gradient of the log transition density of Y_t | X(s), where Y_t | E_t=e_t \sim N(Le_t, \sigma_Y \sigma_Y^T)
         
-        To do: Think about feeding in the Cholesky decomposition instead of the covariance to save compute time.
-        # s: float
-        # t: float
-        # x_s: (N, dimX)
-        # y_t: (N, dimY)
-        # LY: (dimY, dimX)
-        # sigmaY: (dimY, dimY)
+        s: float
+        t: float
+        x_s: (N, dimX)
+        y_t: (N, dimY)
+        LY: (dimY, dimX)
+        sigmaY: (dimY, dimY)
         """
         _a = np.einsum('ij,hjk->hik', LY, self._a(s, t)) #(N, dimY, dimX)
         _b = (LY @ self._b(s, t).T).T #(N, dimY)
@@ -1234,7 +1395,7 @@ class MvLinearSDE(MvSDE):
         Transition density of the linear SDE, output as a distribution object:
         Object is vectorised over N particles.
         
-        Use in DiscreteDiscreteSSMs for exact bootstrap fk or for the weights in guided fk. 
+        Use in DiscreteDiscreteSSMs for exact bootstrap fk or for the weights in guided fk.
         
         Inputs
         ------------
@@ -1255,7 +1416,7 @@ class MvLinearSDE(MvSDE):
     def optimal_proposal_dist(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: np.ndarray, sigmaY: np.ndarray):
         """
         Proposal for the end point using the exact distribution $E_t | E_{t-1}=e_{t-1}, Y_t = y_t$ from a Linear SDE.
-        No longer used in the CDSSM SMC algorithms, but used in DiscreteDiscreteSSMs.
+        No longer used in the CDSSM SMC algorithms, but used in DiscreteDiscreteSSMs for guided proposals.
                 
         x_s: (N, dimX)
         y_t: (1, dimY)

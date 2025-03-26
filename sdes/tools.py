@@ -7,9 +7,7 @@ of some results.
 import numpy as np
 import numpy.linalg as nla
 import matplotlib.pyplot as plt
-import seaborn as sb
 import inspect
-import arviz as az
 import time
 import collections
 
@@ -21,6 +19,16 @@ def log_abs_det(A):
     """
     return np.log(np.abs(nla.det(A)))
 
+def univ_container(N=100):
+    names = [str(round(i, 1)) for i in np.arange(1, 11, dtype=np.float64)/10.]
+    dtype = [(name, 'float64') for name in names]
+    return np.empty(N, dtype=dtype)
+
+def mv_container(N=100, dim=2):
+    names = [str(round(i, 1)) for i in np.arange(1, 11, dtype=np.float64)/10.]
+    dtype = [(name, 'float64', dim) for name in names]
+    return np.empty(N, dtype=dtype)
+    
 def get_methods(instance):
     return [name for name, member in inspect.getmembers(instance, predicate=inspect.ismethod)]
 
@@ -94,7 +102,7 @@ def filter_step_var_cov(G, varY, pred, yt):
     pred_mean = pred.mean; pred_var = pred.cov
     opt_prop_mean = pred_mean + (G*pred_var)/((G*pred_var) + varY) * (yt - G*pred_mean)
     opt_prop_var = pred_var * (1 - (G*pred_var)/((G*pred_var) + varY))
-    return MeanAndCov(loc=opt_prop_mean, cov=opt_prop_var)
+    return MeanAndCov(mean=opt_prop_mean, cov=opt_prop_var)
 
 def mv_filter_step_var_cov(G, CovY, pred, yt):
     """
@@ -242,8 +250,9 @@ def sims_to_array(x, S_ts, x0=None):
     ----------
     x: List of structured arrays of length l
         x[i] is a structured array of shape (N, ) 
-        contains num fields each of dimension (1, dimX)
-    S_ts: (l, ) Discrete observation times that the simulations correspond to
+        contains num fields each of dimension (1, ) or (1, dimX) 
+    S_ts: (l+1, ) Discrete observation times that the simulations correspond to
+    s_init: (Optional) float: The initial time point of the simulation.
     x0: (Optional) (1, dimX): If included, this initial point is prepended to the 
         returned unstructured array.
 
@@ -252,24 +261,19 @@ def sims_to_array(x, S_ts, x0=None):
     X: Unstructured array of shape (N, l*num (+1), dimX)
     ts: Discretisation points: (l*num (+1), )
     """
-    names = x[0].dtype.names; num = len(names)
-    N = x[0].shape[0]; dimX = x[0][names[0]].shape[1]
+    names = x[0].dtype.names; N = x[0].shape[0]
     X = []; ts = []
     for i in range(len(x)):
-        names = x[i].dtype.names
-        num = len(names)
-        x_i = np.stack([x[i][name] for name in names], axis=1) # (N, num, dimX)
-        if i == 0:
-            ts_i = np.arange(1, num+1, dtype=np.float64) * (S_ts[i])/num # (num, )
-        else: 
-            ts_i = S_ts[i-1] + np.arange(1, num+1, dtype=np.float64) * (S_ts[i] - S_ts[i-1])/num # (num, )
+        names = x[i].dtype.names; num = len(names)
+        x_i = np.stack([x[i][name] for name in names], axis=1) # (N, num) / (N, num, dimX)
+        ts_i = S_ts[i] + np.arange(1, num+1, dtype=np.float64) * (S_ts[i+1] - S_ts[i])/num # (num, )
         X.append(x_i); ts.append(ts_i)
     X = np.concatenate(X, axis=1) # (N, l*num, dimX)
-    ts = np.concatenate(ts, axis=0) # (N, l*num, dimX)
+    ts = np.concatenate(ts, axis=0) # (l*num)
     if x0 is not None:
-        x0_arr = np.stack([x0]*N, axis=0) # (N, 1, dimX)
-        X = np.concatenate([x0_arr, X], axis=1) # (N, l*num + 1, dimX)
-        ts = np.concatenate([np.array([0.]), ts], axis=0) # (num+1,)
+        x0_arr = np.stack([x0]*N, axis=0) # (N, 1) / (N, 1, dimX)
+        X = np.concatenate([x0_arr, X], axis=1) # (N, l*num + 1) / (N, l*num + 1, dimX)
+        ts = np.concatenate([np.array([0.]), ts], axis=0) # (l*num+1,)
     return X, ts
     
 def struct_array_to_array(struct_X):
@@ -338,15 +342,6 @@ def mv_state_container_size(X: np.ndarray, x_start):
     size = max(X_shape_idx, x_start_shape_idx)
     return size
 
-def use_end_point(phi):
-    def phi_dec(t, x, xf):
-        if x is not None:
-            x = x if x.dtype in [np.float32, np.float64] else x[x.dtype.names[-1]]
-        xf = xf if xf.dtype in [np.float32, np.float64] else xf[xf.dtype.names[-1]]
-        out = phi(t, x, xf)
-        return out
-    return phi_dec
-
 def init_kwargs_dict(cls, locals):
     signature = inspect.signature(cls.__init__)
     params = signature.parameters
@@ -404,127 +399,6 @@ def isNonNegDefinite(A):
     else:
         return False
     
-def mcmc_to_inferencedata(mcmc):
-    """
-    Converts a particles MCMC object into an ArviZ InferenceData object, including posterior samples,
-    prior samples, acceptance rate (stored as an attribute), latent variable x (if available), 
-    observed data, and CPU time (stored as an attribute of the posterior).
-    
-    Observations are stored in the `observed_data` group, accounting for different data types:
-    - Univariate observations: shape (1,) stored with a "time" coordinate.
-    - Unnamed multivariate observations: shape (1, dimy) stored with "time" and "dimy" coordinates.
-    - Named multivariate observations: structured arrays, stored with "time" and "parameter" coordinates.
-    
-    Parameters:
-    - mcmc: An MCMC object from the particles package, which has a 'chain' attribute containing
-            the output of the Markov chain and a 'prior' attribute representing the prior distribution.
-    
-    Returns:
-    - idata: An ArviZ InferenceData object with the posterior, prior samples, latent variables (x),
-             observed data, and sample statistics. The cpu_time and acceptance rate are stored as 
-             attributes of the posterior.
-    """
-
-    # Extract the MCMC chain output (theta)
-    theta = mcmc.chain.theta  # This is a structured numpy array with dimension (niter,)
-    niter = mcmc.niter
-    T = len(mcmc.data)
- 
-    # Get the parameter names from the structured array
-    param_names = theta.dtype.names
-    
-    # Initialize dictionaries to store posterior and prior samples
-    posterior_samples = {}
-    prior_samples = {}
-
-    # Generate prior samples using the prior distribution's 'rvs' method
-    prior = mcmc.prior.rvs(size=niter)  # This is a structured array with the same dtype as theta
-    
-    # Collect posterior samples for parameters (theta)
-    for param in param_names:
-        posterior_samples[param] = theta[param].reshape((1, niter))  # Reshape to (1, niter) for chain and draw
-        prior_samples[param] = prior[param]
-    
-    # Initialize posterior coordinates
-    coords = {
-        "chain": [0],               # Single chain assumed
-        "draw": np.arange(niter)    # Iterations of the MCMC
-    }
-
-    # Add dims for posterior parameters (theta)
-    dims = {param: ["chain", "draw"] for param in param_names}
-
-    # Check if the MCMC chain has the latent variable 'x'
-    if hasattr(mcmc.chain, 'x'):
-        x = mcmc.chain.x  # Extract the latent variable x
-        
-        # If 'x' is a structured array (has .dtype.names), handle it with an extra parameter dimension
-        if x.dtype.names:
-            param_names_x = x.dtype.names  # Get the parameter names for 'x'
-            T = x.shape[1]                 # Number of timesteps (second dimension of x)
-
-            x_extend = np.stack([x[param] for param in param_names_x], axis=-1)
-            posterior_samples['x'] = x_extend.reshape((1, niter, T, len(param_names_x)))
-            coords["time"] = np.arange(T)
-            coords["continuous_time"] = param_names_x
-            
-            # Add dims for structured x parameters        
-            dims["x"] = ["chain", "draw", "time", "continuous_time"] 
-
-        else:
-            # If 'x' is a regular numpy array, treat it as (niter, T)
-            T = x.shape[1]  # Number of timesteps
-            posterior_samples['x'] = x.reshape((1, niter, T))  # Add to posterior samples
-            
-            # Add time as a coordinate
-            coords["time"] = np.arange(T)
-            dims["x"] = ["chain", "draw", "time"]  # Add dims for the non-structured latent variable x
-
-    # Handle observed data in the 'data' attribute
-    observed_data_samples = {}
-
-    if mcmc.data[0].shape == (1,): # Univariate case
-        observed_data_samples['obs'] = np.concatenate(mcmc.data)
-    else:
-        raise NotImplementedError("Multivariate/structured observations not yet supported.")
-
-    # Set dimensions for observed data
-    dims['obs'] = ['time']
-
-    # Create the InferenceData object using arviz.from_dict
-    idata = az.from_dict(
-        posterior=posterior_samples,
-        prior=prior_samples if prior_samples else None,
-        observed_data=observed_data_samples if observed_data_samples else None,
-        coords=coords,              # Coordinate system for the posterior
-        dims={**dims}  # Combine dims for posterior and observed data
-    )
-
-    # Store cpu_time as an attribute of the posterior if it exists
-    if hasattr(mcmc, 'cpu_time'):
-        idata.posterior.attrs["cpu_time"] = mcmc.cpu_time  # Add cpu_time as an attribute to the posterior group
-
-    # Store acceptance rate as an attribute of the posterior if it exists
-    if hasattr(mcmc, 'acc_rate'):
-        idata.posterior.attrs["acc_rate"] = mcmc.acc_rate  # Add acceptance rate as an attribute
-
-    
-    attrs_lst = ["prior", "scale", "L", "adaptive", "ssm_cls", "smc_cls", "smc_options", "cdssm_cls", "theta0", "N_steps", "Nx", "fk_cls", "regenerate_data", "backward_step", "num", "cdssm_options"]
-    for attr in attrs_lst:
-        if hasattr(mcmc, attr):
-            idata.attrs[attr] = getattr(mcmc, attr)
-    if hasattr(mcmc, 'mwgibbs'):
-        mwgibbs_attrs = ["scale", "L", "adaptive"]
-        for attr in mwgibbs_attrs:
-            idata.attrs[f'mwgibbs_{attr}'] = getattr(mcmc.mwgibbs, attr)
-    
-    idata.attrs['name'] = mcmc.__class__.__name__
-    idata.attrs['method_cls'] = mcmc.__class__
-    idata.attrs['inference_library'] = 'particles'
-    idata.attrs['inference_library_version'] = '0.3alpha'
-
-    return idata
-
 def timed_func(func):
     def timed(*args, **kwargs):
         start = time.perf_counter()

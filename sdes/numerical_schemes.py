@@ -49,7 +49,7 @@ class NumericalScheme(object):
         """
         x_start = self.default_x_start if x_start is None else x_start
         t_diff = t_end - t_start
-        sims = self._create_state_container(t_diff, num, size, dimX=self.SDE.dimX)
+        sims = self._create_state_container(t_diff, num, size, dim=self.SDE.dimX)
         param_names = sims.dtype.names
         step, first_param = t_diff/num, param_names[0]
         sims[first_param] = self.simulation_step(size, t_start, x_start, step)
@@ -58,12 +58,9 @@ class NumericalScheme(object):
             sims[curr_param] = self.simulation_step(size, prev_time, sims[prev_param], step)
         return sims
     
-    def _create_state_container(self, t_diff, num, size, dimX=1):
+    def _create_state_container(self, t_diff, num, size, dim=1):
         param_names = self._gen_param_names(t_diff, num)
-        if dimX == 1:
-            dtype = [(param_name, 'float64') for param_name in param_names]
-        else:
-            dtype = [(param_name, 'float64', dimX) for param_name in param_names]
+        dtype = [(param_name, 'float64') for param_name in param_names]
         state_container = np.empty(size, dtype=dtype)
         return state_container
 
@@ -88,14 +85,13 @@ class NumericalScheme(object):
 
 class MvNumericalScheme(NumericalScheme):
 
-    def mv_state_container_size(X: np.ndarray, x_start):
-        """ May need to change this later"""
-        return max(X.shape[0], x_start.shape[0])
-
+    def _create_state_container(self, t_diff, num, size, dim=1):
+        param_names = self._gen_param_names(t_diff, num)
+        dtype = [(param_name, 'float64', dim) for param_name in param_names]
+        state_container = np.empty(size, dtype=dtype)
+        return state_container
+    
 class EulerMaruyama(NumericalScheme):
-
-    def __init__(self, SDE):
-        NumericalScheme.__init__(self, SDE)
 
     def simulation_step(self, size, t, x, step):
         """
@@ -137,7 +133,7 @@ class EulerMaruyama(NumericalScheme):
         num, delta_t, t_end = len(t_s), float(t_s[0]), float(t_s[-1])
         t_diff, curr_t = t_end - t_start, t_start        
         size = self._state_container_size(X, x_start)
-        W = self._create_state_container(t_diff, num, size, dimX=self.SDE.dimW)
+        W = self._create_state_container(t_diff, num, size, dim=self.SDE.dimW)
         W[t_s[0]] = self._X_to_W_step(curr_t, np.zeros(X[t_s[0]].shape), x_start, X[t_s[0]], delta_t)
         for i in range(1, len(t_s) - 1):
             curr_t += delta_t
@@ -180,7 +176,7 @@ class EulerMaruyama(NumericalScheme):
         num, delta_t, t_end = len(t_s), float(t_s[0]), float(t_s[-1])
         t_diff, curr_t = t_end - t_start, t_start
         size = self._state_container_size(W, x_start)
-        X = self._create_state_container(t_diff, num, size, dimX=self.SDE.dimX)
+        X = self._create_state_container(t_diff, num, size, dim=self.SDE.dimX)
         x_end = W[t_s[-1]]
         X[t_s[0]] = self._W_to_X_step(curr_t, x_start, 0., W[t_s[0]], delta_t)
         for i in range(1, len(t_s) - 1):
@@ -232,7 +228,10 @@ class LinearExact(NumericalScheme):
         return x_step    
 
 class MvEulerMaruyama(EulerMaruyama, MvNumericalScheme):
-    
+
+    def _create_state_container(self, t_diff, num, size, dim=1):
+        return MvNumericalScheme._create_state_container(self, t_diff, num, size, dim)
+        
     def simulation_step(self, size, t, x, step):
         """
         Given starting point(s) 'x' and a time 't', uses the Euler-Maruyama scheme
@@ -293,7 +292,10 @@ class HypoellipticEulerMaruyama(MvEulerMaruyama):
         return x_next
             
 class MvLinearExact(MvNumericalScheme):
-    
+
+    def _create_state_container(self, t_diff, num, size, dim=1):
+        return MvNumericalScheme._create_state_container(self, t_diff, num, size, dim)
+        
     def simulation_step(self, size, t, x, step):
         """
         Inputs: 

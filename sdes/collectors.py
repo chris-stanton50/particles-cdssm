@@ -4,33 +4,6 @@ from particles.collectors import Collector, OnlineSmootherMixin
 from particles.resampling import wmean_and_var
 import particles.resampling as rs
 
-from sdes.tools import use_end_point
-
-
-#-----------------------------------------------------------------------------------------
-@use_end_point
-def phi_x(t, x, xf): # 1st moment of the end point (N, ), (N, ) -> (N, )
-    return xf
-
-@use_end_point
-def phi_x_x(t, x, xf): # 2nd moment of the end point (N, dimX), (N, dimX) -> (N, dimX)
-    return xf * xf
-
-@use_end_point
-def phi_x_xf(t, x, xf): # 2nd moment of the end point (N, ), (N, ) -> (N, )
-    return np.zeros_like(xf) if x is None else x * xf
-
-@use_end_point
-def phi_x_3(t, x, xf): # 3rd moment of the end point (N, dimX), (N, dimX) -> (N, dimX)
-    return xf ** 3
-
-@use_end_point
-def phi_x_4(t, x, xf): # 4nd moment of the end point (N, dimX), (N, dimX) -> (N, dimX)
-    return xf ** 4
-
-all_add_funcs = {'phi_x': phi_x, 'phi_x_x': phi_x_x, 'phi_x_xf': phi_x_xf, 'phi_x_3': phi_x_3, 'phi_x_4': phi_x_4}
-default_add_funcs = {'phi_x': phi_x, 'phi_x_x': phi_x_x, 'phi_x_xf': phi_x_xf} # Simple choices that can be applied to any SDE regardless of dimension.
-#-----------------------------------------------------------------------------------------
 
 class MultiOnlineSmootherMixin:
     """Mix-in for on-line smoothing algorithms. Extended to 

@@ -65,23 +65,54 @@ def load_results(cdssm_spec_name, objective, N, T, num, n_runs, i, remote=False)
 # CDSSM Plot
 #--------------------------------------------------------------------------
 
-def dim_plots(cdssm, x, y, len=2):
+def cdssm_simulation_plot(cdssm, x, y):
     """
-    Plots on separate axes each dimension of the cdssm:
-    Currently assumed equidistant observations.
+    Plot the simulation of a (1D) GaussianCDSSM object.
     """
     # Convert all data into unstructured np arrays
-    x = x[:len]; y = y[:len]
-    x0 = cdssm.x0; dimX = cdssm.model_sde.dimX
-    s_ts = np.array([cdssm.S(t) for t in range(1, len+1)]) # (len, )
+    x0 = x[0]['0.0'] if cdssm.isobservedat0 else np.array([cdssm.x0])
+    x = x[1:] if cdssm.isobservedat0 else x
+    l = len(x)
+    s_ts = np.array([cdssm.S(t) for t in range(l+1)]) # (len+1, )
+    X, ts = sims_to_array(x, s_ts, x0=x0) # (1, len*num+1),  (l*num+1, )
+    et_s = np.concatenate([x0] + [x_path[x_path.dtype.names[-1]] for x_path in x], axis=0) # (len+1, )
+    Y = np.concatenate(y, axis=0) # (len, )    
+    fig, ax = plt.subplots(figsize=(20, 4))
+    ax.plot(ts, X[0, :], c='red') # Plot the signal
+    obs_s_ts = s_ts[1:] if not cdssm.isobservedat0 else s_ts
+    ax.plot(obs_s_ts, Y, 'x', c='limegreen', markersize=10.) # Plot the observations
+    # Decorate plot (vlines, xticks, xlim, ylim, xlab, ylab)
+    x_max, x_min = np.max(X[0]), np.min(X[0])
+    y_max, y_min = np.max(Y), np.min(Y)
+    xy_max, xy_min = np.max([x_max, y_max]), np.min([x_min, y_min])
+    xy_diff = xy_max - xy_min
+    ylim_min = xy_min - 0.1*xy_diff
+    ylim_max = xy_max + 0.1*xy_diff
+    ax.set_xticks(s_ts)
+    ax.set_xlabel(r'$t$')
+    ax.set_ylabel('$X(s)$')
+    ax.set_xlim(-0.2, ts[-1]+ 0.2)
+    ax.set_ylim(ylim_min, ylim_max)
+    ax.vlines(x=s_ts, ymin=xy_min - 10.*xy_diff, ymax=xy_max + 10.*xy_diff, colors='black', linestyles='--', alpha=0.3, linewidth=1)
+    return fig, ax
+    
+def mv_cdssm_simulation_plot(cdssm, x, y):
+    """
+    Plot a simulation generated from a MvGaussianCDSSM object.
+    Plots on separate axes each dimension of the cdssm:
+    """
+    # Convert all data into unstructured np arrays
+    x0 = x[0]['0.0'] if cdssm.isobservedat0 else cdssm.x0
+    x = x[1:] if cdssm.isobservedat0 else x
+    l = len(x)
+    dimX = cdssm.model_sde.dimX
+    s_ts = np.array([cdssm.S(t) for t in range(l+1)]) # (len+1, )
     X, ts = sims_to_array(x, s_ts, x0=x0) # (1, len*num+1, dimX), (l*num+1, )
-    et_s = np.concatenate([x0] + [x_path[x_path.dtype.names[-1]] for x_path in x], axis=0) # (len, dimX)
-    s_ts_0 = np.concatenate([[0.], s_ts], axis=0) # (len+1, )
-    Y = np.concatenate(y, axis=0) # (len, dimX)
-    G = cdssm.G if hasattr(cdssm, 'G') else cdssm.G_1 # (dimY, dimX)
-    max_abs_values = 1.2 * np.max(np.abs(X[0, :, :]), axis=0)
+    et_s = np.concatenate([x0] + [x_path[x_path.dtype.names[-1]] for x_path in x], axis=0) # (len+1, dimX)
+    Y = np.concatenate(y, axis=0) # (l, dimY)
+    G = cdssm.G
     # Create plots
-    fig, axes = plt.subplots(dimX, 1, figsize=(20, 4*dimX), sharex=True)
+    fig, axes = plt.subplots(dimX, 1, figsize=(20, 4*dimX))
     for i, ax in enumerate(axes):
         # Put signal on each axis
         ax.plot(ts, X[0, :, i], c='red') # Plot the signal
@@ -91,13 +122,23 @@ def dim_plots(cdssm, x, y, len=2):
             if elt != 0.:
                 ax.plot(s_ts, Y[:, j], 'x', c='limegreen', markersize=10.) # Plot the observations
         # Decorate plot (vlines, xticks, xlim, ylim, xlab, ylab)
-        ax.vlines(x=s_ts_0, ymin=-1., ymax=1., colors='black', linestyles='--', alpha=0.3, linewidth=1)
-        ax.set_xticks(s_ts_0)
+        # Decorate plot (vlines, xticks, xlim, ylim, xlab, ylab)
+        x_max, x_min = np.max(X[0, :, i]), np.min(X[0, :, i])
+        y_min_arr = np.array([Y[:, j] for j, elt in enumerate(G[:, i]) if elt != 0.])
+        y_min = np.min(y_min_arr) if y_min_arr.shape[0] > 0 else x_min
+        y_max_arr = np.array([Y[:, j] for j, elt in enumerate(G[:, i]) if elt != 0.])
+        y_max = np.max(y_max_arr) if y_max_arr.shape[0] > 0 else x_max 
+        xy_max, xy_min = np.max([x_max, y_max]), np.min([x_min, y_min])
+        xy_diff = xy_max - xy_min
+        ylim_min = xy_min - 0.1*xy_diff
+        ylim_max = xy_max + 0.1*xy_diff
+        ax.set_xticks(s_ts)
         ax.set_xlabel(r'$t$')
-        ax.set_ylabel(f'$X_{i+1}$')
-        ax.set_xlim(0., len)
-        ax.set_ylim(-max_abs_values[i], max_abs_values[i])
-    fig.suptitle('Sample CDSSM simulation')
+        ax.set_ylabel(f'$X_{i+1}(s)$')
+        ax.set_xlim(-0.2, ts[-1] + 0.2)
+        ax.set_ylim(ylim_min, ylim_max)
+        ax.vlines(x=s_ts, ymin=xy_min - 10.*xy_diff, ymax=xy_max + 10.*xy_diff, colors='black', linestyles='--', alpha=0.3, linewidth=1)
+    # fig.suptitle('Sample CDSSM simulation')
     return fig, axes
     
 # Boxplots
