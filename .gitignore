@@ -18,6 +18,10 @@
 /notebooks/univ_process_tests
 
 # Results
+/paper/filtering/results
+/paper/smoothing/results
+/paper/joint_smoothing/results
+/paper/smoothing_mcmc/results
 /scripts/results
 
 # Hypothesis testing notebook for Paola
