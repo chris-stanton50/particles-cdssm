@@ -1,6 +1,6 @@
-from sdes.cdssm_lib import CDSSM_LIB, build_cdssm
-from sdes.core import CDSSM_SMC
-import sdes.feynman_kac as sfk
+from particles_cdssm.cdssm_lib import CDSSM_LIB, build_cdssm
+from particles_cdssm.core import CDSSM_SMC
+import particles_cdssm.feynman_kac as sfk
 
 T = 5; N=10; num=10; M=5
 

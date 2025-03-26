@@ -1,8 +1,9 @@
-from sdes.cdssm_lib import build_cdssm
-from sdes.mcmc import PIMH, CDSSM_PIMH, ICSMC, CDSSM_ICSMC
 import particles.state_space_models as ssms
 from particles.kalman import MVLinearGauss, LinearGauss
-import sdes.feynman_kac as sfk
+
+from particles_cdssm.cdssm_lib import build_cdssm
+from particles_cdssm.mcmc import PIMH, CDSSM_PIMH, ICSMC, CDSSM_ICSMC
+import particles_cdssm.feynman_kac as sfk
 
 # Data params
 T = 10

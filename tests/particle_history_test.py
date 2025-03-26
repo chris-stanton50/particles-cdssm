@@ -1,8 +1,8 @@
 import numpy as np
 import particles.state_space_models as ssms
 from particles.kalman import MVLinearGauss, LinearGauss
-from sdes.core import SMC
-from sdes.cdssm_lib import CDSSM_LIB, build_cdssm
+from particles_cdssm.core import SMC
+from particles_cdssm.cdssm_lib import CDSSM_LIB, build_cdssm
 
 T = 5; N=10; M=5
 

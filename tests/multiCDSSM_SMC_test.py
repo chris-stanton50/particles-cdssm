@@ -1,8 +1,8 @@
 from particles.collectors import Moments
-from sdes.core import summaries
-from sdes.cdssm_lib import CDSSM_LIB, build_cdssm
-from sdes.core import multiCDSSM_SMC
-import sdes.feynman_kac as sfk
+from particles_cdssm.core import summaries
+from particles_cdssm.cdssm_lib import CDSSM_LIB, build_cdssm
+from particles_cdssm.core import multiCDSSM_SMC
+import particles_cdssm.feynman_kac as sfk
 
 T=10; Ns = [10, 20, 30]; nums = [10, 20, 30]
 

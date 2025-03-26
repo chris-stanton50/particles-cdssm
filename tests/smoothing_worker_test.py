@@ -1,8 +1,8 @@
-from sdes.cdssm_lib import CDSSM_LIB, build_cdssm
-from sdes.core import CDSSM_SMC
-import sdes.feynman_kac as sfk
+from particles_cdssm.cdssm_lib import CDSSM_LIB, build_cdssm
+from particles_cdssm.core import CDSSM_SMC
+import particles_cdssm.feynman_kac as sfk
 from particles.utils import multiplexer
-from sdes.core import CDSSM_SMC, smoothing_worker
+from particles_cdssm.core import CDSSM_SMC, smoothing_worker
 
 Ns=[5, 10, 20]; T = 5; nums = [10, 20]
 smth_methods = ['FFBS_ON2', 'FFBS_MCMC', 'genealogy']
