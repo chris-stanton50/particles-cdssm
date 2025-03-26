@@ -5,7 +5,7 @@ from particles.smoothing import ParticleHistory
 import particles.smoothing as sm
 import particles.resampling as rs
 
-from sdes.feynman_kac import ReparameterisedDA
+from particles_cdssm.feynman_kac import ReparameterisedDA
 
 # method for a ParticleHistory object: generates samples by tracing back the ancestral path.
 # We bind this to the ParticleHistory class, so that we can call it as a method.

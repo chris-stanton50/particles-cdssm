@@ -81,8 +81,8 @@ from particles.state_space_models import StateSpaceModel
 from particles.kalman import MeanAndCov, filter_step, MVLinearGauss, LinearGauss
 import particles.distributions as dists
 
-from sdes.sdes import OrnsteinUhlenbeck, MvOrnsteinUhlenbeck
-from sdes.numerical_schemes import EulerMaruyama, MvEulerMaruyama
+from particles_cdssm.sdes import OrnsteinUhlenbeck, MvOrnsteinUhlenbeck
+from particles_cdssm.numerical_schemes import EulerMaruyama, MvEulerMaruyama
 
 class CDSSMBase:
 

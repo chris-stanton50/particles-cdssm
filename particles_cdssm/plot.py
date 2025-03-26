@@ -13,7 +13,7 @@ import dill
 import numpy as np
 import seaborn as sb
 import matplotlib.pyplot as plt
-from sdes.tools import sims_to_array
+from particles_cdssm.tools import sims_to_array
 
 # Add plotting functionality for SMC objects
 

@@ -12,7 +12,7 @@ If the SDE in question is of dimension one (in both the solution and the driving
 is possible to generate exact simulations from the SDE. These may be implemented here too.  
 """
 
-from sdes.tools import method_match_first_dim
+from particles_cdssm.tools import method_match_first_dim
 import numpy as np
 import scipy.linalg as sla
 import numpy.linalg as nla

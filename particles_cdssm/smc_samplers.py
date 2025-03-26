@@ -2,8 +2,8 @@ import numpy as np
 import particles.smc_samplers as ssp
 from particles.smc_samplers import StaticModel
 from particles.kalman import Kalman
-from sdes.state_space_models import ReparamLinearGauss
-from sdes.continuous_discrete_ssms import Reparam_OU_CDSSM
+from particles_cdssm.state_space_models import ReparamLinearGauss
+from particles_cdssm.continuous_discrete_ssms import Reparam_OU_CDSSM
 
 class LGStaticModel(StaticModel):
     """A Linear, Gaussian Static Model. 

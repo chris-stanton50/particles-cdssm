@@ -167,12 +167,12 @@ Also implemmented at the start of the file, are utility classes that are used to
 import numpy as np
 import numpy.linalg as nla
 import scipy.stats as stats
-from sdes.numerical_schemes import HypoellipticEulerMaruyama
-from sdes.sdes import SDEBase, SDE, MvSDE, MvEllipticSDE, HypoellipticSDE, BrownianMotion, OrnsteinUhlenbeck, MvIndepBrownianMotion, MvBrownianMotion, MvIndepOrnsteinUhlenbeck, MvOrnsteinUhlenbeck
-from sdes.sdes import HypoellipticSDE, IntegratedSDE, TwiceIntegratedSDE, IntegratedIndepBrownianMotion, IntegratedBrownianMotion, IntegratedIndepOrnsteinUhlenbeck, IntegratedOrnsteinUhlenbeck
-from sdes.sdes import TwiceIntegratedIndepBrownianMotion, TwiceIntegratedBrownianMotion, TwiceIntegratedIndepOrnsteinUhlenbeck, TwiceIntegratedOrnsteinUhlenbeck, TimeSwitchingSDE
-from sdes.path_integrals import log_girsanov, log_delyon_hu, log_van_der_meulen_schauer, mv_log_girsanov, mv_log_delyon_hu, mv_log_van_der_meulen_schauer
-from sdes.tools import log_abs_det, filter_step_var_cov, mv_filter_step_var_cov, MeanAndCov
+from particles_cdssm.numerical_schemes import HypoellipticEulerMaruyama
+from particles_cdssm.sdes import SDEBase, SDE, MvSDE, MvEllipticSDE, HypoellipticSDE, BrownianMotion, OrnsteinUhlenbeck, MvIndepBrownianMotion, MvBrownianMotion, MvIndepOrnsteinUhlenbeck, MvOrnsteinUhlenbeck
+from particles_cdssm.sdes import HypoellipticSDE, IntegratedSDE, TwiceIntegratedSDE, IntegratedIndepBrownianMotion, IntegratedBrownianMotion, IntegratedIndepOrnsteinUhlenbeck, IntegratedOrnsteinUhlenbeck
+from particles_cdssm.sdes import TwiceIntegratedIndepBrownianMotion, TwiceIntegratedBrownianMotion, TwiceIntegratedIndepOrnsteinUhlenbeck, TwiceIntegratedOrnsteinUhlenbeck, TimeSwitchingSDE
+from particles_cdssm.path_integrals import log_girsanov, log_delyon_hu, log_van_der_meulen_schauer, mv_log_girsanov, mv_log_delyon_hu, mv_log_van_der_meulen_schauer
+from particles_cdssm.tools import log_abs_det, filter_step_var_cov, mv_filter_step_var_cov, MeanAndCov
 from particles.distributions import Normal, VaryingCovNormal
 
 # -----------------LinearSDE Proposal Classes -----------------

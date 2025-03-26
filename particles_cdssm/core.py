@@ -22,9 +22,9 @@ import particles
 from particles.collectors import default_collector_cls, Moments
 from particles.utils import multiplexer
 
-from sdes.plot import PlotSMC
-from sdes.feynman_kac import CDSSM_FeynmanKac
-from sdes.smoothing import generate_hist_obj
+from particles_cdssm.plot import PlotSMC
+from particles_cdssm.feynman_kac import CDSSM_FeynmanKac
+from particles_cdssm.smoothing import generate_hist_obj
 
 class SMC(particles.SMC, PlotSMC):
     """

@@ -9,10 +9,10 @@ from particles.core import SMC
 from particles.kalman import Kalman
 from particles.mcmc import CSMC
 
-import sdes.continuous_discrete_ssms as cdssms
-import sdes.feynman_kac as sfk
-from sdes.core import CDSSM_SMC, CDSSM_FeynmanKac
-from sdes.tools import init_kwargs_dict
+import particles_cdssm.continuous_discrete_ssms as cdssms
+import particles_cdssm.feynman_kac as sfk
+from particles_cdssm.core import CDSSM_SMC, CDSSM_FeynmanKac
+from particles_cdssm.tools import init_kwargs_dict
 
 
 """

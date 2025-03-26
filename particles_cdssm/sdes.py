@@ -38,9 +38,9 @@ import math
 import numpy as np
 import scipy.linalg as sla
 from particles.distributions import Normal, VaryingCovNormal, MvNormal
-from sdes.numerical_schemes import EulerMaruyama, LinearExact, MvEulerMaruyama, HypoellipticEulerMaruyama, MvLinearExact
-from sdes.tools import MeanAndCov, filter_step_var_cov, mv_filter_step_var_cov, vectorise_param, grad_log_linear_gaussian, grad_grad_log_linear_gaussian, mv_grad_log_linear_gaussian, mv_grad_grad_log_linear_gaussian
-from sdes.tools import get_methods, vec_grad_log_linear_gaussian
+from particles_cdssm.numerical_schemes import EulerMaruyama, LinearExact, MvEulerMaruyama, HypoellipticEulerMaruyama, MvLinearExact
+from particles_cdssm.tools import MeanAndCov, filter_step_var_cov, mv_filter_step_var_cov, vectorise_param, grad_log_linear_gaussian, grad_grad_log_linear_gaussian, mv_grad_log_linear_gaussian, mv_grad_grad_log_linear_gaussian
+from particles_cdssm.tools import get_methods, vec_grad_log_linear_gaussian
 
 
 #---------------------------------- Abstract Base Class for Univariate SDEs ----------------------------------

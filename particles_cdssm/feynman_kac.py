@@ -60,9 +60,9 @@ import numpy as np
 from particles import FeynmanKac
 from particles.resampling import wmean_and_var
 
-import sdes.sdes as sdes 
-import sdes.auxiliary_bridges as axb
-import sdes.continuous_discrete_ssms as cdssms
+import particles_cdssm.sdes as sdes 
+import particles_cdssm.auxiliary_bridges as axb
+import particles_cdssm.continuous_discrete_ssms as cdssms
 
 err_msg_missing_trans_pathspace = """
     Feynman-Kac class %s is missing method logpt, which provides the log-pdf

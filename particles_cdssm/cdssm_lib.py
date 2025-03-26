@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.linalg as nla
-import sdes.sdes as sdes
-from sdes.continuous_discrete_ssms import GaussianCDSSM, MvGaussianCDSSM
+import particles_cdssm.sdes as sdes
+from particles_cdssm.continuous_discrete_ssms import GaussianCDSSM, MvGaussianCDSSM
 import particles.state_space_models as ssms
 import particles.distributions as dists
 import warnings
