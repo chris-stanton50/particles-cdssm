@@ -47,32 +47,33 @@ Below is the full list of SMC methods that one can implement for inference in th
 - Particle Filters
     - Bootstrap Particle Filter
     - Guided Particle Filter
-    - Auxiliary Particle Filter
 
 ## Offline Smoothing ($X_{1:t} | Y_{1:t}=y_{1:t}$)
 
 - Particle-based smoothers 
     - FFBS
-    - FFBS-MCMC 
-- Particle MCMC-based smoothers
+    - FFBS-MCMC
+
+<!-- - Particle MCMC-based smoothers
     - iCMSC
     - iCSMC-MCMC
-
-## Online Smoothing for Additive Functionals ($X_{1:t} | Y_{1:t}=y_{1:t}$)
-
-- Forward Additive- $\mathcal{O}(N^2)$
-- Forward Additive-MCMC
 
 ## Joint Offline Smoothing ($X_{1:t}, \theta | Y_{1:t}=y_{1:t}$)
 
 - Particle MCMC
     - Particle Marginal Metropolis Hastings (PMMH)
     - Particle Gibbs (PG)
-    - Particle Gibbs with Backward Step (PGBS)
+    - Particle Gibbs with Backward Step (PGBS) -->
 
-## Joint Online Smoothing ($X_{1:t}, \theta | Y_{1:t}=y_{1:t}$)
+<!-- ## Online Smoothing for Additive Functionals ($X_{1:t} | Y_{1:t}=y_{1:t}$)
 
-- $SMC^2$
+- Forward Additive- $\mathcal{O}(N^2)$
+- Forward Additive-MCMC -->
+
+
+<!-- ## Joint Online Smoothing ($X_{1:t}, \theta | Y_{1:t}=y_{1:t}$)
+
+- $SMC^2$ -->
 
 That's all for now! Tutorials to introduce you to the API and more formal documentation are on the way! A user that is already familiar with the `particles` package will hopefully find it intuitive.
 
