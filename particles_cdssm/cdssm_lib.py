@@ -12,10 +12,10 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 We use this module to define the CDSSM specifications that we will use in our experiments.
 
 - For filtering experiments, we are interested in evaluating the performance of guided particle
-filters in the low noise regime. 
+filters in the low noise regime. So, we attempt to define a CDSSM where the noise in the latent process
+is low.
 
-- For smoothing experiments, we are interested in evaluating the performance of smoothing methods
-as the number of observations $T$ increases.
+- For smoothing experiments, we are interested in defining a .
 """
 # Note: Run times are based on the local: a trial run indicates that the remote is ~40% faster 
 # than the local. (This is based on the MV_OU model for filtering.)
@@ -33,6 +33,19 @@ OU = {
     'smoothing_fk_names': ['BootstrapDA', 'BsR_DH', 'FwG_OUP', 'FwR_DH_OUP', 'BwG_DH_DBrP', 'BwR_DH_DBrP'],
     'default_T': 10,
     'seed': 34953,
+    'n_bottom_fks': 6,
+    'n_top_fks': 7
+    }
+
+BM = {
+    'sde_cls': sdes.BrownianMotion,
+    'cdssm_cls': GaussianCDSSM,
+    'filtering_sde_params': {'m': 0., 's': 1.0},
+    'filtering_cdssm_params': {'x0': 0., 's_ts': 1., 'sigmaY': 0.1},
+    'default_T': 10,
+    'seed': 34953,
+    'n_bottom_fks': 6,
+    'n_top_fks': 19,
     }
 
 #------------------------------------------------------------------------------------------
@@ -60,19 +73,19 @@ MV_OU = {
     #             'phi': np.array([[0.001, 0.], [0., 1.0]]),
     #             },
     'smoothing_sde_params': {'dimX': 2,
-                'rho': np.array([1.0, 1.0]).reshape((1, 2)),
+                'rho': np.array([0.01, 1.0]).reshape((1, 2)),
                 'mu': np.zeros((1, 2)),
-                'phi': np.array([[1.0, 0.], [0., 1.0]]),
+                'phi': np.array([[0.01, 0.], [0., 1.0]]),
                 },
     'filtering_cdssm_params': {'x0': np.zeros((1, 2)),
                     's_ts': 1., 
                     'G': np.eye(2),
-                    'covY': 0.1 * np.eye(2)
+                    'covY': (0.1 ** 2) * np.eye(2)
                     },
-    'smoothing_cdssm_params': {'x0': dists.MvNormal(loc=np.zeros((1, 2)), cov=1.*np.eye(2)),
+    'smoothing_cdssm_params': {'x0': dists.MvNormal(loc=np.zeros((1, 2)), cov=np.eye(2)),
                     's_ts': 1.,
                     'G': np.eye(2),
-                    'covY': np.array([[1., 0.], [0., 0.1]])
+                    'covY': np.array([[1., 0.],[0., 0.1]])
                     },
     'filtering_fk_names': ['BootstrapDA', 'BsR_DH', 'BwG_OU_OUP', 'BwR_OU_OUP', 'BwG_DH_OUP', 'BwR_DH_OUP', 'FwG_OUP', 'FwR_DH_OUP'],
     'smoothing_fk_names': ['BootstrapDA', 'BsR_DH', 'BwG_DH_DBrP', 'BwR_DH_DBrP'],
@@ -80,7 +93,27 @@ MV_OU = {
     # 'smoothing_fk_names': ['BootstrapDA', 'BsR_DH', 'FwG_OUP', 'FwR_DH_OUP', 'BwG_DH_DBrP', 'BwR_DH_DBrP'],
     'default_T': 10,
     'seed': 34953,
-}
+    'n_bottom_fks': 6,
+    'n_top_fks': 9 
+    }
+
+MV_BM = {
+    'sde_cls': sdes.MvBrownianMotion,
+    'cdssm_cls': MvGaussianCDSSM,
+    'filtering_sde_params': {'dimX': 2,
+                'm': np.zeros((1, 2)),
+                's': 1.0*np.eye(2),
+                },
+    'filtering_cdssm_params': {'x0': np.zeros((1, 2)),
+                    's_ts': 1., 
+                    'G': np.eye(2),
+                    'covY': (0.1 ** 2) * np.eye(2)
+                    },
+    'default_T': 10,
+    'seed': 34953,
+    'n_bottom_fks': 6,
+    'n_top_fks': 25
+    }
 
 #---------------------------------------------------------------------------------------------
 #---------------------IntegratedOrnsteinUhlenbeck + MvGaussianCDSSM---------------------------
@@ -122,40 +155,106 @@ IOU = {
     'cdssm_cls': MvGaussianCDSSM,
     'filtering_sde_params': {'dimX': 2,
                     'rho': 1.0*np.ones((1, 1)),
-                    'mu': 1.0*np.ones((1, 1)),
-                    'phi': 0.2*np.ones((1, 1)),
+                    'mu': np.zeros((1, 1)),
+                    'phi': 1.0*np.ones((1, 1)),
                     },
     'smoothing_sde_params': {'dimX': 2,
-                    'rho': 1.0*np.ones((1, 1)),
-                    'mu': 1.0*np.ones((1, 1)),
-                    'phi': 0.1*np.ones((1, 1)),
+                    'rho': 0.01*np.ones((1, 1)),
+                    'mu': np.zeros((1, 1)),
+                    'phi': 0.01*np.ones((1, 1)),
                     },
     'filtering_cdssm_params': {
                     'x0': np.zeros((1, 2)),
                     's_ts': 1.,
                     'G': np.array([1., 0.]).reshape((1, 2)), # smooth component observed
-                    'covY': (0.01 ** 2) * np.eye(1) # low noise regime
+                    'covY': (0.02 ** 2) * np.eye(1) # low noise regime
                     },
-    'smoothing_cdssm_params': {'x0': dists.MvNormal(loc=np.array([0., 1.]).reshape((1, 2)), cov=0.1*np.eye(2)),
+    'smoothing_cdssm_params': {'x0': dists.MvNormal(loc=np.array([0.1, 0.1]).reshape((1, 2)), cov=(0.1**2) *  np.eye(2)),
                     's_ts': 1.,
                     'G': np.array([1., 0.]).reshape((1, 2)), # smooth component observed
-                    'covY': (0.01 ** 2) * np.eye(1) 
+                    'covY': (0.1 ** 2) * np.eye(1)
                     },
     'filtering_fk_names': ['BootstrapDA', 'BsR_DH', 'BwG_OU_OUP', 'BwR_OU_OUP', 'BwG_DH_OUP', 'BwR_DH_OUP'],
-    'smoothing_fk_names': ['BootstrapDA', 'BwG_NDOU_OUP', 'BwR_NDOU_OUP'],
+    'smoothing_fk_names': ['BootstrapDA', 'BwG_DBr_DBrP', 'BwR_DBr_DBrP'],
     'default_T': 5,
     'seed': 34953,
+    'n_bottom_fks': 2,
+    'n_top_fks': 17
     }
 
+IBM = {
+    'sde_cls': sdes.IntegratedBrownianMotion,
+    'cdssm_cls': MvGaussianCDSSM,
+    'filtering_sde_params': {'dimX': 2,
+                    'm': np.zeros((1, 1)),
+                    's': 1.0*np.ones((1, 1))
+                    },
+    'filtering_cdssm_params': {
+                    'x0': np.zeros((1, 2)),
+                    's_ts': 1.,
+                    'G': np.array([1., 0.]).reshape((1, 2)), # smooth component observed
+                    'covY': (0.02 ** 2) * np.eye(1) # low noise regime
+                    },
+    'default_T': 5,
+    'seed': 34953,
+    'n_bottom_fks': 2,
+    'n_top_fks': 17
+}
+
+#---------------------TwiceIntegratedOrnsteinUhlenbeck + MvGaussianCDSSM---------------------------
+
+
+I2OU = {
+    'sde_cls': sdes.TwiceIntegratedOrnsteinUhlenbeck,
+    'cdssm_cls': MvGaussianCDSSM,
+    'filtering_sde_params': {'dimX': 3,
+                    'rho': 1.0*np.ones((1, 1)),
+                    'mu': np.zeros((1, 1)),
+                    'phi': 1.0*np.ones((1, 1)),
+                    },
+    'filtering_cdssm_params': {
+                    'x0': np.zeros((1, 3)),
+                    's_ts': 1.,
+                    'G': np.array([1., 0., 0.]).reshape((1, 3)), # smoothest component observed
+                    'covY': (0.02 ** 2) * np.eye(1) # low noise regime
+                    },
+    'default_T': 5,
+    'seed': 34953,
+    'n_bottom_fks': 2,
+    'n_top_fks': None
+    }
+
+I2BM = {
+    'sde_cls': sdes.TwiceIntegratedBrownianMotion,
+    'cdssm_cls': MvGaussianCDSSM,
+    'filtering_sde_params': {'dimX': 3,
+                    'm': np.zeros((1, 1)),
+                    's': 1.0*np.ones((1, 1)),
+                    },
+    'filtering_cdssm_params': {
+                    'x0': np.zeros((1, 3)),
+                    's_ts': 1.,
+                    'G': np.array([1., 0., 0.]).reshape((1, 3)), # smoothest component observed
+                    'covY': (0.02 ** 2) * np.eye(1) # low noise regime
+                    },
+    'default_T': 5,
+    'seed': 34953,
+    'n_bottom_fks': 2,
+    'n_top_fks': None
+    }
 
 #-----------------------------------------------------------------------------------------
 #---------------------IntegratedFitzHughNagumo + GaussianCDSSM ---------------------------
 
 CDSSM_LIB = {'ou': OU,
+             'bm': BM,
              'mv_ou': MV_OU,
+             'mv_bm': MV_BM,
              'iou': IOU,
-            #  'ifhn': IFHN # This is an example of parameter inference.
-             }
+             'ibm': IBM,
+             'i2ou': I2OU,
+             'i2bm': I2BM
+            }
 
 def build_cdssm(cdssm_spec_name, smoothing):
     """
@@ -164,7 +263,7 @@ def build_cdssm(cdssm_spec_name, smoothing):
     cdssm_spec_name: str
     smoothing: (bool): True = smoothing, False = filtering
 
-    Rewturns:
+    Returns:
     --------
     cdssm: A cdssm object defined by the given CDSSM Spec.
     """
