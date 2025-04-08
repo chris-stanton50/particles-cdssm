@@ -120,7 +120,10 @@ def mv_cdssm_simulation_plot(cdssm, x, y):
         # If signal is involved in the generation of the observation, plot them:
         for j, elt in enumerate(G[:, i]):
             if elt != 0.:
-                ax.plot(s_ts, Y[:, j], 'x', c='limegreen', markersize=10.) # Plot the observations
+                if cdssm.isobservedat0:
+                    ax.plot(s_ts, Y[:, j], 'x', c='limegreen', markersize=10.) # Plot the observations
+                else:
+                    ax.plot(s_ts[1:], Y[:, j], 'x', c='limegreen', markersize=10.)
         # Decorate plot (vlines, xticks, xlim, ylim, xlab, ylab)
         # Decorate plot (vlines, xticks, xlim, ylim, xlab, ylab)
         x_max, x_min = np.max(X[0, :, i]), np.min(X[0, :, i])
