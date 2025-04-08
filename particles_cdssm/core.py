@@ -358,7 +358,7 @@ def smoothing_worker(
             z_arr = np.stack([z_i[z_i.dtype.names[-1]] for z_i in z]) # (T, N) / (T, N, dimX)
         else:
             z_arr = np.stack([z_i for z_i in z]) # (T, N) / (T, N, dimX)
-        out['quantiles'] = np.quantile(z_arr, quantiles, axis=0) # (nQ, T) or (nQ, T, dimX)
+        out['quantiles'] = np.quantile(z_arr, quantiles, axis=1) # (nQ, T) or (nQ, T, dimX)
         out['quantile_index'] = quantiles
     out['cpu_time'] = cpu_time
     return out
