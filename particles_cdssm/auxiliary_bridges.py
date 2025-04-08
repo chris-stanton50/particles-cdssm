@@ -346,7 +346,7 @@ class BuildLinearSDE(object):
             if isinstance(self, TwiceIntegratedVanDerMeulenSchauerAuxBridge):
                 return self.TwiceIntegratedIndepLinearSDECls if self._diag_cov else self.TwiceIntegratedLinearSDECls
             else:
-                return self.TwiceIntegratedIndepLinearSDECls if not self.full_cov else self.TwiceIntegratedLinearSDECls
+                return self.TwiceIntegratedIndepLinearSDECls if (not self.any_cov or not self.full_cov) else self.TwiceIntegratedLinearSDECls
 
     def build_linear_sde(self):
         self.LinearSDE = self.LinearSDECls(**self.get_linear_sde_params())
@@ -358,7 +358,7 @@ class BuildBrownianLinearSDE(BuildLinearSDE):
     MvIndepLinearSDECls = MvIndepBrownianMotion
     IntegratedLinearSDECls = IntegratedBrownianMotion
     IntegratedIndepLinearSDECls = IntegratedIndepBrownianMotion
-    TwiceIntegratedSDECls = TwiceIntegratedBrownianMotion
+    TwiceIntegratedLinearSDECls = TwiceIntegratedBrownianMotion
     TwiceIntegratedIndepLinearSDECls = TwiceIntegratedIndepBrownianMotion
     
     diffusion_param_name = 's'
@@ -385,7 +385,7 @@ class BuildOULinearSDE(BuildLinearSDE):
     MvIndepLinearSDECls = MvIndepOrnsteinUhlenbeck
     IntegratedLinearSDECls = IntegratedOrnsteinUhlenbeck
     IntegratedIndepLinearSDECls = IntegratedIndepOrnsteinUhlenbeck
-    TwiceIntegratedSDECls = TwiceIntegratedOrnsteinUhlenbeck
+    TwiceIntegratedLinearSDECls = TwiceIntegratedOrnsteinUhlenbeck
     TwiceIntegratedIndepLinearSDECls = TwiceIntegratedIndepOrnsteinUhlenbeck
 
     drift=True # We keep the 0th order element of the expansion of the 
@@ -402,10 +402,13 @@ class BuildOULinearSDE(BuildLinearSDE):
     
     def get_univ_linearising_functions(self):
         def rho(t, x):
-            return -1.*self.SDE.db(t, x)
+            db = self.SDE.db(t, x)
+            db = self._subst_vals(db)
+            return -1.*db
         def mu(t, x):
             A = self.SDE.b(t, x) - self.SDE.db(t, x)*x
             B = self.SDE.db(t, x)
+            B = self._subst_vals(B)
             return -A/B
         def phi(t, x):
             return self.SDE.sigma(t, x)
@@ -413,29 +416,63 @@ class BuildOULinearSDE(BuildLinearSDE):
     
     def get_mv_linearising_functions(self):
         def rho(t, x):
-            return -1.*self.SDE.db(t, x)
+            db = self.SDE.db(t, x)
+            db = self._subst_vals(db)
+            return -1.*db
         def mu(t, x):
-            return nla.solve(-1.*self.SDE.db(t, x), self.SDE.b(t, x) - np.einsum('ijk,ik->ij', self.SDE.db(t, x), x))
+            db = self.SDE.db(t, x)
+            A = self.SDE.b(t, x) - np.einsum('ijk,ik->ij', self.SDE.db(t, x), x) # (N, dw)
+            B = self._subst_vals_matrix(db)
+            return nla.solve(-1.*B, A)
         def phi(t, x):
             return self.SDE.sigma(t, x)
         return {'rho': rho, 'mu': mu, 'phi': phi}
     
     def get_hypo_linearising_functions(self):
         def rho(t, x):
-            return -1.*self.SDE.db_rough(t, x)
+            self.SDE.db_rough(t, x)
+            db_rough = self._subst_vals(self.SDE.db_rough(t, x))
+            return -1.*db_rough
         def mu(t, x):
-            return nla.solve(-1.*self.SDE.db_rough(t, x), self.SDE.b_rough(t, x) - np.einsum('ijk,ik->ij', self.SDE.db_rough(t, x), x[:, -self.SDE.dimW:]))
+            db_rough = self.SDE.db_rough(t, x)
+            A = self.SDE.b_rough(t, x) - np.einsum('ijk,ik->ij', self.SDE.db_rough(t, x), x[:, -self.SDE.dimW:]) # (N, dw)
+            B = self._subst_vals_matrix(db_rough)
+            return nla.solve(-1.*B, A)
         def phi(t, x):
             return self.SDE.sigma_rough(t, x)
         return {'rho': rho, 'mu': mu, 'phi': phi}
         
-    def check_drift_param(self, linear_sde_params):
+    def check_drift_param(self, linear_sde_params):     
+        # If a multivariate SDE, take only the diagonal elements (to avoid matrix exponential)
         if isinstance(self.SDE, MvSDE):
             linear_sde_params['rho'] = self._param_to_diag(linear_sde_params['rho'])
+        # Set the rho parameter to a small value if it is close to 0.
+        # linear_sde_params['rho'] = self._subst_vals(linear_sde_params['rho'])
         if not self.drift: # Remove 0th order term in Taylor expansion of the drift term (currently only used in Hypoelliptic case).
             linear_sde_params['mu'] = np.zeros_like(linear_sde_params['mu']) if isinstance(self.SDE, MvSDE) else 0.
         return linear_sde_params
 
+    def _subst_vals(self, param, subst_val=0.1, subst_val_tol=1e-5):
+        if isinstance(param, float) and np.abs(param) < subst_val_tol:
+            return subst_val
+        else:
+            return np.where(np.abs(param) < subst_val_tol, subst_val, param)
+    
+    def _subst_vals_matrix(self, db, subst_val=0.1, subst_val_tol=1e-5):
+        N = db.shape[0]
+        det_db = np.linalg.det(db)
+        low_det = np.abs(det_db) < subst_val_tol
+        if not np.any(low_det):
+            return db
+        elif np.all(low_det):
+            return np.array([np.eye(self.SDE.dimW)]*N)
+        else:
+            for i, det in enumerate(det_db):
+                if low_det[i]:
+                    db[i] = subst_val * np.sign(det) * np.eye(self.SDE.dimX)
+
+
+        
 class CheckSDE(object):
     """
     Utility class to add `check_sde method to ForwardProposal, AuxiliaryBridge and EndPointProposal classes.
@@ -1340,7 +1377,7 @@ class IntegratedNoDriftLLOUAuxBridge(IntegratedVanDerMeulenSchauerAuxBridge, Bui
     drift=False # Exclude the 0th order term in the Taylor expansion of the drift.
     
 class TwiceIntegratedLLOUAuxBridge(TwiceIntegratedVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
-    sname = 'H2INDOU'
+    sname = 'H2IOU'
 
 class TwiceIntegratedNoDriftLLOUAuxBridge(TwiceIntegratedVanDerMeulenSchauerAuxBridge, BuildOULinearSDE):
     sname = 'H2INDOU'
@@ -1394,12 +1431,12 @@ class TwiceIntegratedDriftBrownianEndPointProposal(TwiceIntegratedLinearEndPoint
     full_cov = True
     drift = True
 
-class TwiceIntegratedIndepOUEndPointProposal(TwiceIntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
+class TwiceIntegratedIndepOUEndPointProposal(TwiceIntegratedLinearEndPointProposal, BuildOULinearSDE):
     sname='H2IIOUP'
     any_cov = True
     full_cov = False
 
-class TwiceIntegratedOUEndPointProposal(TwiceIntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
+class TwiceIntegratedOUEndPointProposal(TwiceIntegratedLinearEndPointProposal, BuildOULinearSDE):
     sname='H2IOUP'
     any_cov = True
     full_cov = True
