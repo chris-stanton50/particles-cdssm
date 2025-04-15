@@ -10,4 +10,7 @@
 /notebooks/.ipynb_checkpoints
 #ipynb notebooks
 *.ipynb
-
+#Json files 
+*.json 
+#Pickle objects
+*.pkl
