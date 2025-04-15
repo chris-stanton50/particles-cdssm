@@ -234,7 +234,7 @@ class BuildLinearSDE(object):
     Due to the matching condition, the covariance matrix is predetermined by the diffusion of the signal at the end points
     in the case of auxiliary bridges.
     
-    We need to add 3 decordators:
+    We need to add 3 decorators:
     
     - Rough comp dec: when the underlying SDE is Hypoelliptic
     - SDE Tol Dec: When the underlying SDE is a TimeSwitchingSDE and/or is an instance of a multivariate diffusion bridge MvVanderMeulenSchauerAuxBridge
