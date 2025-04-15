@@ -58,7 +58,7 @@ Currently, the default choices are:
 import numpy as np
 
 from particles import FeynmanKac
-from particles.resampling import wmean_and_var
+import particles.resampling as rs
 
 import particles_cdssm.sdes as sdes 
 import particles_cdssm.auxiliary_bridges as axb
@@ -147,7 +147,7 @@ class CDSSM_FeynmanKac(FeynmanKac):
         bit, so that the paths at each time step have a common ending point.
         """
         end_pts = X[X.dtype.names[-1]] 
-        return wmean_and_var(W, end_pts)
+        return rs.wmean_and_var(W, end_pts)
 
     def _preprocess_logpt(self, xp, x):
         x_start = xp[xp.dtype.names[-1]]; N = x_start.shape[0]
@@ -263,7 +263,7 @@ class GuidedDA(CDSSM_FeynmanKac):
 
     def logG0_observedat0(self, x):
         return (self.cdssm.x0.logpdf(x['0.0'])
-        + self.cdssm.PY(0, None, x['0.0']).logpdf(self.data[0])
+        + self.cdssm.PY(0, None, x).logpdf(self.data[0])
         - self.cdssm.proposal0(self.data).logpdf(x['0.0'])
         )
     
@@ -347,7 +347,7 @@ class BootstrapDA(CDSSM_FeynmanKac):
         return self.model_sde.simulate(xp.shape[0], xp[xp.dtype.names[-1]], t_start=self.cdssm.S(t), t_end=self.cdssm.S(t+1), num=self.num)
 
     def logG(self, t, xp, x):
-        return self.cdssm.PY(t, xp, x[x.dtype.names[-1]]).logpdf(self.data[t])
+        return self.cdssm.PY(t, xp, x).logpdf(self.data[t])
 
 class BootstrapReparameterisedDA(BootstrapDA, ReparameterisedDA, AuxiliaryBridgeMixin):
     """    
@@ -446,9 +446,8 @@ class ForwardGuidedDA(GuidedDA, ForwardProposalMixin):
     
     def logGt(self, t, xp, x):
         x_start = xp[xp.dtype.names[-1]] if t > 0 else self._init_x0(x.shape[0])
-        x_end = x[x.dtype.names[-1]]
         forward_proposal = self._build_forward_proposal(t, x_start)
-        obs_density_logpdf = self.cdssm.PY(t, xp, x_end).logpdf(self.data[t])
+        obs_density_logpdf = self.cdssm.PY(t, xp, x).logpdf(self.data[t])
         log_girsanov_likelihood = forward_proposal.log_girsanov(x)
         return obs_density_logpdf + log_girsanov_likelihood
         
@@ -581,7 +580,7 @@ class BackwardGuidedDA(GuidedDA, AuxiliaryBridgeMixin, EndPointProposalMixin):
         aux_bridge = self._build_aux_bridge(t, x_start, x_end)
         end_pt_prop_logpdf = end_point_proposal.logpdf(x_end)
         bridge_log_likelihood = aux_bridge.bridge_log_likelihood(x_start, x)
-        obs_density_logpdf = self.cdssm.PY(t, xp, x_end).logpdf(self.data[t])
+        obs_density_logpdf = self.cdssm.PY(t, xp, x).logpdf(self.data[t])
         return obs_density_logpdf + bridge_log_likelihood - end_pt_prop_logpdf
             
 class BackwardReparameterisedDA(BackwardGuidedDA, ReparameterisedDA):
@@ -615,7 +614,7 @@ class BackwardReparameterisedDA(BackwardGuidedDA, ReparameterisedDA):
         aux_bridge = self._build_aux_bridge(t, x_start, x_end)
         x = aux_bridge.transform_W_to_X(x, x_start)
         end_point_proposal = self._build_end_point_proposal(t, x_start)
-        obs_density_logpdf = self.cdssm.PY(t, xp, x_end).logpdf(self.data[t])
+        obs_density_logpdf = self.cdssm.PY(t, xp, x).logpdf(self.data[t])
         bridge_log_likelihood = aux_bridge.bridge_log_likelihood(x_start, x)
         end_pt_prop_logpdf = end_point_proposal.logpdf(x_end)
         return obs_density_logpdf + bridge_log_likelihood - end_pt_prop_logpdf
