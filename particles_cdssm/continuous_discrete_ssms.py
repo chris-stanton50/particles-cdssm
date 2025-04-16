@@ -176,7 +176,7 @@ class CDSSMBase:
     def simulate_given_x(self, x):
         lag_x = [None] + x[:-1]
         return [
-            self.PY(t, xp, x[x.dtype.names[-1]]).rvs(size=1) for t, (xp, x) in enumerate(zip(lag_x, x))
+            self.PY(t, xp, x).rvs(size=1) for t, (xp, x) in enumerate(zip(lag_x, x))
         ]
 
     def simulate(self, T, num=1000):
@@ -262,7 +262,8 @@ class GaussianCDSSM(CDSSM):
     default_params = {'sigmaY': 1.}
                 
     def PY(self, t, xp, x):
-        return dists.Normal(loc=x, scale=self.sigmaY)
+        x_end = x[x.dtype.names[-1]]
+        return dists.Normal(loc=x_end, scale=self.sigmaY)
 
     def LY(self, t):
         return 1.
@@ -393,7 +394,8 @@ class MvGaussianCDSSM(MvCDSSM):
         self.sigmaY = nla.cholesky(self.covY)
 
     def PY(self, t, xp, x):
-        return dists.MvNormal(loc=x @ self.G.T, cov=self.covY)
+        x_end = x[x.dtype.names[-1]]
+        return dists.MvNormal(loc=x_end @ self.G.T, cov=self.covY)
     
     def LY(self, t):
         return self.G
