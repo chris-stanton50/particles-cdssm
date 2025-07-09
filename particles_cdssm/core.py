@@ -22,11 +22,10 @@ import particles
 from particles.collectors import default_collector_cls, Moments
 from particles.utils import multiplexer
 
-from particles_cdssm.plot import PlotSMC
 from particles_cdssm.feynman_kac import CDSSM_FeynmanKac
 from particles_cdssm.smoothing import generate_hist_obj
 
-class SMC(particles.SMC, PlotSMC):
+class SMC(particles.SMC):
     """
     New version of `SMC` with additional methods for backward sampling.
     New method is passed to the `ParticleHistory` object, see the `particles_cdssm.smoothing` module.

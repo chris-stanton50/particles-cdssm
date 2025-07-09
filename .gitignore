@@ -14,3 +14,20 @@
 *.json 
 #Pickle objects
 *.pkl
+
+# Files in development not included in the first release:
+
+# Tests
+/tests/smoothing_mcmc
+/tests/smoothing
+/tests/running
+/tests/profiling
+/tests/linear_sdes/test_iou_4_dims_correlated_noise.py
+/tests/linear_sdes/filtering_test_results.ipynb
+
+# Not included in first release
+/particles_cdssm/deprecated
+
+# Particle MCMC related files (to be added in next release)
+/particles_cdssm/mcmc.py
+

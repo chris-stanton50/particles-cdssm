@@ -209,6 +209,9 @@ class CDSSM(CDSSMBase):
         Used to create initial state container in the following contexts:
             - SMC algorithms (so used in fk models)
             - Generating a simulation from a CDSSM.
+            - Creating a state container for MCMC algorithms when cdssm `isobservedat0'.
+                (i.e x0 is a distribution)
+                (N is niter in this context)
         """
         dtype = [('0.0', 'float64')]
         return np.empty(N, dtype=dtype)
@@ -216,6 +219,7 @@ class CDSSM(CDSSMBase):
     def state_container(self, N, T, num, delta_s):
         """
         Used in initialising containers for MCMC algorithms.
+        (N is niter in this context)
         """
         shape = [N, T]
         numerical_scheme = EulerMaruyama(OrnsteinUhlenbeck()) # Dummy instance to access method
@@ -262,7 +266,7 @@ class GaussianCDSSM(CDSSM):
     default_params = {'sigmaY': 1.}
                 
     def PY(self, t, xp, x):
-        x_end = x[x.dtype.names[-1]]
+        x_end = x[x.dtype.names[-1]] if x.dtype.names is not None else x
         return dists.Normal(loc=x_end, scale=self.sigmaY)
 
     def LY(self, t):
@@ -321,12 +325,21 @@ class MvCDSSM(CDSSMBase):
         return np.zeros((1, self.dimX))
     
     def _init_dist_container(self, N):
+        """
+        Used to create initial state container in the following contexts:
+            - SMC algorithms (so used in fk models)
+            - Generating a simulation from a CDSSM.
+            - Creating a state container for MCMC algorithms when cdssm `isobservedat0'.
+                (i.e x0 is a distribution)
+                (N is niter in this context)
+        """
         dtype = [('0.0', 'float64', self.dimX)]
         return np.empty(N, dtype=dtype)
 
     def state_container(self, N, T, num, delta_s):
         """
         Used in initialising containers for MCMC algorithms.
+        (N is niter in this context)
         """
         shape = [N, T]
         numerical_scheme = MvEulerMaruyama(MvOrnsteinUhlenbeck()) # Dummy instance to access method
@@ -394,7 +407,7 @@ class MvGaussianCDSSM(MvCDSSM):
         self.sigmaY = nla.cholesky(self.covY)
 
     def PY(self, t, xp, x):
-        x_end = x[x.dtype.names[-1]]
+        x_end = x[x.dtype.names[-1]] if x.dtype.names is not None else x
         return dists.MvNormal(loc=x_end @ self.G.T, cov=self.covY)
     
     def LY(self, t):

@@ -279,8 +279,8 @@ class ReparameterisedDA(CDSSM_FeynmanKac):
             return self._samples_transform_W_to_X(W)
 
     def _sample_transform_W_to_X(self, W):
-        W = [np.array(path).reshape(1) for path in W] # List of paths to list of arrays of paths
-        X = self._samples_transform_W_to_X(W)
+        W_arrs = [np.array(path).reshape(1) for path in W] # List of paths to list of arrays of paths
+        X = self._samples_transform_W_to_X(W_arrs)
         return [path[0] for path in X] # List of arrays of paths to list of paths
 
     def _samples_transform_W_to_X(self, W):

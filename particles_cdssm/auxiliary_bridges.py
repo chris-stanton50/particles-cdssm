@@ -268,7 +268,7 @@ class BuildLinearSDE(object):
         if not (self.N == 1 and isinstance(self.SDE, MvSDE)):
             return func
         dw = self.SDE.dimW; dx = self.SDE.dimX; N = self.N
-        if isinstance(self, MvEllipticSDE):
+        if isinstance(self.SDE, MvEllipticSDE):
             def trim_output(t, x):
                 out = func(t, x)
                 return out.reshape(dx, dw) if out.shape == (N, dx, dw) else out
@@ -302,19 +302,28 @@ class BuildLinearSDE(object):
 
     def _param_to_diag(self, param):
         N = self.N
-        return np.stack([np.diag(param[i]) for i in range(N)], axis=0) if N > 1 else np.diag(param).reshape(N, self.SDE.dimW)
+        return np.diagonal(param, axis1=1, axis2=2) if N > 1 else np.diag(param).reshape(N, self.SDE.dimW)
     
     def check_linear_sde_params(self, linear_sde_params):
         return self.check_drift_param(self.check_diffusion_param(linear_sde_params))
 
     def check_matching_condition(self, linear_sde_params):
+        """
+        Checks whether the matching condition of the diffusion coefficient for the VanDerMeulen-Schauer aux bridge holds.
+        
+        linear_sde_params: Will extract the diffusion param, which is of shape (N, dimW, dimW) for N > 1 or (dimW, dimW) for N=1
+                
+        We need to compare to sigma_x_end, which is of shape (N, dimX, dimW) for any N.
+        """
         par = self.diffusion_param_name
         if isinstance(self, VanDerMeulenSchauerAuxBridge) or isinstance(self, MvVanDerMeulenSchauerAuxBridge):
             if not isinstance(self, HypoellipticAuxiliaryBridge):
                 diff_coef = linear_sde_params[par]
             else:
-                diff_coef = np.concatenate([np.zeros((self.N, self.dimS, self.dimW)), linear_sde_params[par]], axis=1)
-            matching_condition = np.all(np.isclose(self.sigma_x_end, diff_coef))
+                Z = np.zeros((self.N, self.dimS, self.dimW)) if self.N > 1 else np.zeros((self.dimS, self.dimW))
+                ax = 1 if self.N > 1 else 0
+                diff_coef = np.concatenate([Z, linear_sde_params[par]], axis=ax)
+            matching_condition = np.all(np.isclose(self.sigma_x_end, diff_coef)) # Broadcasts for N=1
             if not matching_condition:
                 raise ValueError('Matching condition for bridge proposal not satisfied.')
                 
@@ -322,10 +331,10 @@ class BuildLinearSDE(object):
         t, x = self.get_linearising_points()
         linearising_functions = self.get_linearising_functions()
         linear_sde_params = {param: func(t, x) for param, func in linearising_functions.items()}
+        self.check_matching_condition(linear_sde_params)
         if isinstance(self.SDE, MvSDE):
             linear_sde_params.update({'N': self.N, 'dimX': self.SDE.dimX})
             linear_sde_params = self.check_linear_sde_params(linear_sde_params)
-        self.check_matching_condition(linear_sde_params)
         return linear_sde_params
     
     @property
@@ -471,8 +480,6 @@ class BuildOULinearSDE(BuildLinearSDE):
                 if low_det[i]:
                     db[i] = subst_val * np.sign(det) * np.eye(self.SDE.dimX)
 
-
-        
 class CheckSDE(object):
     """
     Utility class to add `check_sde method to ForwardProposal, AuxiliaryBridge and EndPointProposal classes.
@@ -567,7 +574,7 @@ class ForwardProposal(ForwardProposalBase, SDE, CheckUnivSDE):
         """
         NOT IMPLEMENTED CORRECTLY.
         This is needed for ForwardGuided/ForwardReparametrised DA, when using a VanDerMeulen and Schauer OU bridge proposal.
-        Thr brige construction is only used in the smoothing, and numerical experiments show that the choice of bridge for the 
+        This bridge construction is only used in the smoothing, and numerical experiments show that the choice of bridge for the 
         reparameterisation does not affect the performance of the smoothing algorithms, so this is not a priority. 
         """
         # raise NotImplementedError(self._error_msg('db'))
@@ -1190,9 +1197,7 @@ class MvVanDerMeulenSchauerAuxBridge(MvAuxiliaryBridge):
         """
         tol_dec = self._sde_tol_dec
         sigma = tol_dec(self.SDE.sigma)
-        sigma_x_end = sigma(self.t_end, self.x_end) # (N, dimX, dimX)
-        if self._diag_cov:
-            sigma_x_end = np.stack([np.diag(sigma_x_end[i]) for i in range(self.N)], axis=0) if self.N > 1 else np.diag(sigma_x_end[0])
+        sigma_x_end = sigma(self.t_end, self.x_end) # (N, dimX, dimW)
         return sigma_x_end
     
     @property
@@ -1216,7 +1221,7 @@ class MvVanDerMeulenSchauerAuxBridge(MvAuxiliaryBridge):
         return log_wgts
 
 class MvEllipticVanDerMeulenSchauerAuxBridge(MvVanDerMeulenSchauerAuxBridge, MvEllipticAuxiliaryBridge):
-    pass 
+    pass    
 
 # ---------------Multivariate Brownian Auxiliary Bridge Proposals: 2 Classes ----------------
 
@@ -1347,7 +1352,8 @@ class IntegratedVanDerMeulenSchauerAuxBridge(IntegratedAuxiliaryBridge, MvVanDer
     pass
 
 class TwiceIntegratedVanDerMeulenSchauerAuxBridge(TwiceIntegratedAuxiliaryBridge, MvVanDerMeulenSchauerAuxBridge):
-    pass    
+    pass
+       
 
 # ---------------Hypoelliptic Brownian Auxiliary Bridge Proposals: 4 Classes ----------------
 
