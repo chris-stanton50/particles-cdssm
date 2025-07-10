@@ -39,9 +39,6 @@ the corresponding function `particles.core.multiSMC` in the particles package.
 - Particle-based smoothers (other smoothers for standard SSMs are implemented in the particles package)
     - Genealogy Tracking (`particles_cdssm.smoothing.backward_sampling_genealogy`)
 
-- Particle MCMC-based smoothers
-    - PIMH (`particles_cdssm.mcmc.PIMH`)
-    - iCMSC (`particles_cdssm.mcmc.ICSMC`)
 
 ### CD-SSMs
 
@@ -60,6 +57,14 @@ To be used in conjunction with `particles.utils.multiplexer` to run either `SMC`
 The items listed below will be a part of future developments:
 
 ## Offline Smoothing ($X_{1:t} | Y_{1:t}=y_{1:t}$)
+
+### Standard SSMs
+
+- Particle MCMC-based smoothers
+    - PIMH (`particles_cdssm.mcmc.PIMH`)
+    - iCMSC (`particles_cdssm.mcmc.ICSMC`)
+
+### CD-SSMs
 
 - Particle MCMC-based smoothers
     - PIMH (`particles_cdssm.mcmc.CDSSM_PIMH`) (*Under Development*)

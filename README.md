@@ -1,8 +1,7 @@
 # Particle Based Inference for Continuous-Discrete State Space Models (CD-SSMs) - `particles_cdssm`
 
-A Python package to implement Sequential Monte Carlo methods for inference in Continuous-Discrete State Space Models. Built on top of the `particles` package, can also be used as an alternative to packages for simulation of SDE paths using numerical integrators (such as `sdeint`).    
+A Python package to implement Sequential Monte Carlo methods for inference in [Continuous-Discrete State Space Models.](https://arxiv.org/abs/2407.15666v1#) Built on top of the [particles](https://github.com/nchopin/particles/tree/master) package.    
 
-This project was initally developed to implement the methods outlined the paper [**Particle Based Inference for Continuous-Discrete State Space Models**](https://arxiv.org/abs/2407.15666v1#). As the project progressed, the code was extended to have an API to make the developed methods more accessible to an end user - the end result is this `particles_cdssm` package. Please cite the following work if using these methods for your research:
 
 ```
 @article{stanton2024particle,
@@ -13,48 +12,123 @@ This project was initally developed to implement the methods outlined the paper 
 }
 ```
 
-## What does this package do?
+# Difference between a State Space Model and a Continuous Discrete State Space model:
 
-This package provides implementations of numerical methods (namely, Sequential Monte Carlo methods) to conduct Bayesian filtering, smoothing and forecasting on a class of models that we call 'Continuous-Discrete State Space models' (CD-SSMs). Loosely speaking, a CD-SSM is a model in which a latent continuous-time process is observed at discrete points in time, with noise. In particular, the continuous-time process that is not observed is the solution of a **Stochastic Differential Equation** (SDE), also known as a diffusion processes.
+Example of both for Stochastic Volatility:
 
-## What are the numerical methods implemented to achieve this?
+### Stochastic Volatility State Space Model
 
-We use Sequential Monte Carlo methods for inference. This class of methods is now around 25 years old and has established itself as a state-of-the-art approach for inference in State Space Models. For those unfamiliar with this class of methods, we refer to the book-length treatment [An Introduction to Sequential Monte Carlo](https://link.springer.com/book/10.1007/978-3-030-47845-2). A package to implement these methods accompanies the book: [particles](https://github.com/nchopin/particles).
 
-## Why would I want to use SMC methods for inference in CD-SSMs?
+$$X_0 \sim N\left(\mu, \frac{\sigma^2}{1-\rho^2}\right)$$
+$$X_t|X_{t-1}=x_{t-1} \sim N\left( \mu + \rho (x_{t-1}-\mu), \sigma^2\right), \quad t\geq 1$$
+$$Y_t|X_t=x_t \sim N\left(0, e^{x_t}\right) \quad t\geq 0.$$
 
-There are many real-world applications for which it is natural to use a stochastic dynamical system as the model: here are a few examples:
+
+### Stochastic Volatility Continuous-Discrete State Space Model
+
+
+$$\textrm{Initial Distribution:} \quad X(0) \sim \mathcal{N}(\mu, \frac{\phi^2}{2\rho})$$
+$$\textrm{Continuous Latent State process}: \quad dX(s) = \rho(\mu - X(s))ds + \phi dB(s) ,\quad s \in [0, S]$$
+$$\textrm{Observed at Discrete Times:} \quad Y_t | X(t) = x(t) \sim \mathcal{N}(0, e^{x(t)}) ,\quad t\in \{0, 1, 2, \dots, T-1\}.$$
+
+The continuous-discrete state space model allows one to define volatility continuously throughout the trading day, instead of only having one value of volatility for each trading day. 
+
+# Difference between this package and the `particles` package:
+
+
+In the particles package, we could run a particle filter on a state space model as follows:
+
+```python
+import particles
+import particles.state_space_models as ssms
+
+class StochVol(ssms.StateSpaceModel):
+    def PX0(self):  # Distribution of X_0
+        return dists.Normal(loc=self.mu, scale=self.sigma / np.sqrt(1. - self.rho**2))
+    def PX(self, t, xp):  # Distribution of X_t given X_{t-1}=xp (p=past)
+        return dists.Normal(loc=self.mu + self.rho * (xp - self.mu), scale=self.sigma)
+    def PY(self, t, xp, x):  # Distribution of Y_t given X_t=x (and possibly X_{t-1}=xp)
+        return dists.Normal(loc=0., scale=np.exp(0.5 * x))
+   
+sv_ssm = StochVol(mu=-1., rho=.95, sigma=.1)  # actual model
+
+x, y = sv_ssm.simulate(100)
+
+fk_model = ssms.Bootstrap(ssm=sv_ssm, data=y)
+alg = particles.SMC(fk=fk_model, N=100)
+
+alg.run()
+```
+
+In the particles-cdssm package, we can run a particle filter for a continuous-discrete state space model as follows:
+
+```python
+import particles.distributions as dists
+
+import particles_cdssm
+import particles_cdssm.sdes as sdes
+import particles_cdssm.continuous_discrete_ssms as cdssms
+import particles_cdssm.feynman_kac as cdfk
+
+
+rho=1.0; mu=-1.0; phi=0.2  # parameters of the Ornstein-Uhlenbeck process
+
+# Initial distribution
+initial_dist = dists.Normal(loc=mu, scale=phi/np.sqrt(2*rho))  # Initial distribution of the latent state
+
+# Define the Ornstein Uhlenbeck SDE
+class OrnsteinUhlenbeck(sdes.SDE):
+    
+    default_params = {'rho': 1.0, 'mu': -1.0, 'phi': 0.1} 
+    
+    def b(self, t, x):  # Drift function
+        return self.rho * (self.mu - x)
+    
+    def sigma(self, t, x):  # Diffusion function
+        return self.phi
+
+ou_sde = OrnsteinUhlenbeck(rho=rho, mu=mu, phi=phi)  # Ornstein-Uhlenbeck SDE    
+
+# Define the observation density as a method of a subclass of the CDSSM class: 
+
+class StochVolCDSSM(cdssms.CDSSM):
+    
+    def PY(self, t, xp, x):
+        return dists.Normal(loc=0., scale=np.exp(0.5 * x))
+
+sv_cdssm = StochVolCDSSM(ou_sde, x0=initial_dist) # Stochastic volatility continuous-discrete state-space model
+
+x, y = sv_cdssm.simulate(100)
+cd_fk_model = cdfk.BootstrapDA(cdssm = sv_cdssm, data=y)
+
+alg = particles_cdssm.CDSSM_SMC(fk=cd_fk_model, N=100)
+alg.run()
+```
+
+
+
+## Some interesting applications for CD-SSMs:
 
 - Population Modelling (e.g Malthus/Verhulst)
 - Biosciences (e.g Lotka-Volterra)
 - Neuroscience (e.g Fitzhugh-Nagumo/Duffing-Van-Der-Pol)
 - Finance (Black-Scholes-Merton/Heston/Cox-Ingersoll-Ross)
-
-Furthermore, for these applications, K-step ahead forecasting is often the main goal of the modelling exercise. For example, we might want to predict the population in K years time, or we may want to predict a stock price the next day. The online nature of particle filters makes them ideal for cross-validating forecasting performance of these models. It is much less efficient computationally to attempt this using offline inference methods such as MCMC. Furthermore, generated predictions are inherently probabilistic, so we get uncertainty quantification for free.
-
-## Can I not just use the particles package instead of this one?
-
-There are challenges associated with using SMC methods to conduct inference when the latent states come from a diffusion observed at discrete times: the most problematic one is that the transition denity between the latent states is intractable for all but the simplest of models. This package implements SMC methods that are able to successfully able to overcome this and other issues, using an approach originally formulated in the context of Markov Chain Monte Carlo (MCMC) methods known as **Data Augmentation**. 
-
-For further details on the issues involved with using SMC for CD-SSMs and how it is possible to implement particle-based methods despite these issues, see the publication that motivated the development of this package [Particle Based Inference for Continuous-Discrete State Space Models](https://arxiv.org/abs/2407.15666v1#) and the references therein.
  
-## What SMC algorithms are implemented in this package?
+## Features ##
 
-Below is the full list of SMC methods that one can implement for inference in the class of CD-SSMs. Sequential Monte Carlo methods can be used for a broad range of inferential objectives.
-
-## Online Filtering ($X_t | Y_{1:t}=y_{1:t}$)
-
-- Particle Filters
+- *Particle Filters*
     - Bootstrap Particle Filter
-    - Guided Particle Filter
+    - Guided Particle Filter (via Forward and Backward proposals)
 
-## Offline Smoothing ($X_{1:t} | Y_{1:t}=y_{1:t}$)
+- *Forward Filtering Backward Sampling*
+    - FFBS (Standard $\mathcal{O}(N^2)$ version)
+    - FFBS-MCMC (Linear cost $\mathcal{O}(N)$)
 
-- Particle-based smoothers 
-    - FFBS
-    - FFBS-MCMC
+Bayesian parameter estimation via Particle MCMC and online smoothing algorithms are under development for next release. That's all for now: check out the docs if this interests you!
 
-<!-- - Particle MCMC-based smoothers
+<!-- 
+# Future Development
+    - Particle MCMC-based smoothers
     - iCMSC
     - iCSMC-MCMC
 
@@ -75,7 +149,10 @@ Below is the full list of SMC methods that one can implement for inference in th
 
 - $SMC^2$ -->
 
-That's all for now! Tutorials to introduce you to the API and more formal documentation are on the way! A user that is already familiar with the `particles` package will hopefully find it intuitive.
+
+# Contact
+
+This package is under active development - for any issues, bugs or frustrations, please do submit an issue, or alternatively you can e-mail me (christopher.stanton.20@ucl.ac.uk).
 
 # Setup Instructions
 

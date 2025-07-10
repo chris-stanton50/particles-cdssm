@@ -3,14 +3,14 @@ Contains the CDSSMs parameterisations used in the tests/experiments in this fold
 """
 import numpy as np
 import particles_cdssm.sdes as sdes
-from particles_cdssm.continuous_discrete_ssms import GaussianCDSSM, MvGaussianCDSSM
+from particles_cdssm.continuous_discrete_ssms import NormalCDSSM, MvNormalCDSSM
 
 #----------------------------------------------------------------------------------------------
-# ---------------------------- OrnsteinUhlenbeck + GaussianCDSSM ------------------------------
+# ---------------------------- OrnsteinUhlenbeck + NormalCDSSM ------------------------------
 
 OU = {
     'sde_cls': sdes.OrnsteinUhlenbeck,
-    'cdssm_cls': GaussianCDSSM,
+    'cdssm_cls': NormalCDSSM,
     'sde_params': {'rho': 1.0, 'mu': 0., 'phi': 1.0},
     'cdssm_params': {'x0': 0., 's_ts': 1., 'sigmaY': 0.1},
     'seed': 34953,
@@ -20,7 +20,7 @@ OU = {
 
 BM = {
     'sde_cls': sdes.BrownianMotion,
-    'cdssm_cls': GaussianCDSSM,
+    'cdssm_cls': NormalCDSSM,
     'sde_params': {'m': 0., 's': 1.0},
     'cdssm_params': {'x0': 0., 's_ts': 1., 'sigmaY': 0.1},
     'seed': 34953,
@@ -29,11 +29,11 @@ BM = {
     }
 
 #------------------------------------------------------------------------------------------
-# ----------------------- MvOrnsteinUhlenbeck + MvGaussianCDSSM -----------------------------
+# ----------------------- MvOrnsteinUhlenbeck + MvNormalCDSSM -----------------------------
 
 MV_OU = {
     'sde_cls': sdes.MvOrnsteinUhlenbeck,
-    'cdssm_cls': MvGaussianCDSSM,
+    'cdssm_cls': MvNormalCDSSM,
     'sde_params': {'dimX': 2,
                 'rho': 1.0*np.ones((1, 2)),
                 'mu': np.zeros((1, 2)),
@@ -51,7 +51,7 @@ MV_OU = {
 
 MV_BM = {
     'sde_cls': sdes.MvBrownianMotion,
-    'cdssm_cls': MvGaussianCDSSM,
+    'cdssm_cls': MvNormalCDSSM,
     'sde_params': {'dimX': 2,
                 'm': np.zeros((1, 2)),
                 's': 1.0*np.eye(2),
@@ -67,11 +67,11 @@ MV_BM = {
     }
 
 #---------------------------------------------------------------------------------------------
-#---------------------IntegratedOrnsteinUhlenbeck + MvGaussianCDSSM---------------------------
+#---------------------IntegratedOrnsteinUhlenbeck + MvNormalCDSSM---------------------------
 
 IOU = {
     'sde_cls': sdes.IntegratedOrnsteinUhlenbeck,
-    'cdssm_cls': MvGaussianCDSSM,
+    'cdssm_cls': MvNormalCDSSM,
     'sde_params': {'dimX': 2,
                     'rho': 1.0*np.ones((1, 1)),
                     'mu': np.zeros((1, 1)),
@@ -90,7 +90,7 @@ IOU = {
 
 IBM = {
     'sde_cls': sdes.IntegratedBrownianMotion,
-    'cdssm_cls': MvGaussianCDSSM,
+    'cdssm_cls': MvNormalCDSSM,
     'sde_params': {'dimX': 2,
                     'm': np.zeros((1, 1)),
                     's': 1.0*np.ones((1, 1))
@@ -106,12 +106,12 @@ IBM = {
     'n_top_fks': 17,
 }
 
-#---------------------TwiceIntegratedOrnsteinUhlenbeck + MvGaussianCDSSM---------------------------
+#---------------------TwiceIntegratedOrnsteinUhlenbeck + MvNormalCDSSM---------------------------
 
 
 I2OU = {
     'sde_cls': sdes.TwiceIntegratedOrnsteinUhlenbeck,
-    'cdssm_cls': MvGaussianCDSSM,
+    'cdssm_cls': MvNormalCDSSM,
     'sde_params': {'dimX': 3,
                     'rho': 1.0*np.ones((1, 1)),
                     'mu': np.zeros((1, 1)),
@@ -131,7 +131,7 @@ I2OU = {
 
 I2BM = {
     'sde_cls': sdes.TwiceIntegratedBrownianMotion,
-    'cdssm_cls': MvGaussianCDSSM,
+    'cdssm_cls': MvNormalCDSSM,
     'filtering_sde_params': {'dimX': 3,
                     'm': np.zeros((1, 1)),
                     's': 1.0*np.ones((1, 1)),

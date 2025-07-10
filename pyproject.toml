@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools >= 40.8", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "particles_cdssm"
+description = "Sequential Monte Carlo for Continuous-Discrete State Space Models in Python"
+readme = "README.md"
+version = "0.1"
+requires-python = ">= 3.9"
+authors = [
+    { name = "Christopher Stanton", email = "christopher.stanton.20@ucl.ac.uk" },
+]
+dependencies = [
+    "particles >= 0.4, < 0.5",
+    "numpy >= 1.18, < 2",
+    "scipy >= 1.7",
+]
+classifiers = [
+    "Programming Language :: Python",
+    "Development Status :: 3 - Alpha",
+    "Natural Language :: English",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.license]
+license = {file = "LICENSE"}
+
+[project.urls]
+repository = "https://github.com/chris-stanton50/particles-cdssm/"
+
+[project.optional-dependencies]
+extra = [
+    "pandas",
+    "statsmodels",
+    "ipython",
+    "seaborn",
+    "matplotlib",
+]
+
+[tool.setuptools.packages.find]
+# scanning for namespace packages is true by default in pyproject.toml, so
+# you do NOT need to include the following line.
+namespaces = true

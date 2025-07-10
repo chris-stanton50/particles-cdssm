@@ -6,11 +6,14 @@ of some results.
 
 import numpy as np
 import numpy.linalg as nla
-import matplotlib.pyplot as plt
-import arviz as az
 import inspect
 import time
 import collections
+
+# import matplotlib.pyplot as plt
+# import arviz as az
+
+
 
 MeanAndCov = collections.namedtuple("MeanAndCov", "mean cov")
 
@@ -328,18 +331,6 @@ def vectorise_param(param, num_plus_1):
     else:
         return np.stack([param]*num_plus_1).T
 
-def univariate_simulation_test(sde, nums, dist_kwargs):
-    fig, ax = plt.subplots()
-    for num in nums:
-        dist_kwargs['num'] = num
-        rvs = sde.simulate(size=1, **dist_kwargs)
-        t_s = [dist_kwargs['t_start']] + [float(t) for t in rvs.dtype.names]
-        X_ts = struct_array_to_array(rvs); X_ts = np.concatenate([np.array([dist_kwargs['init_x']]), X_ts])
-        ax.plot(t_s, X_ts, label=f'n_points = {num}')
-    # Configure axis settings
-    ax.legend(); ax.set_xlabel('t'); ax.set_ylabel('X_t'); ax.grid(visible=True)
-    return fig, ax
-
 def mv_state_container_size(X: np.ndarray, x_start):
     X_shape_idx = 1 if X.shape == () else X.shape[1]
     x_start_shape_idx = 1 if x_start.shape == () else x_start.shape[1]
@@ -423,112 +414,124 @@ def timed_func(func):
         return result, end - start
     return timed
 
-def to_idata(alg, name=None):
-    """
-    Converts an X_MCMC object to an ArviZ InferenceData object. 
-    
-    Also accessible as a method to the X_MCMC class.
-    
-    Inputs:
-    ----------
-    
-    alg: X_MCMC object
-        The MCMC algorithm to convert.
-    name: str (optional): The name of the algorithm to convert into an idata object.
+# def univariate_simulation_test(sde, nums, dist_kwargs):
+#     fig, ax = plt.subplots()
+#     for num in nums:
+#         dist_kwargs['num'] = num
+#         rvs = sde.simulate(size=1, **dist_kwargs)
+#         t_s = [dist_kwargs['t_start']] + [float(t) for t in rvs.dtype.names]
+#         X_ts = struct_array_to_array(rvs); X_ts = np.concatenate([np.array([dist_kwargs['init_x']]), X_ts])
+#         ax.plot(t_s, X_ts, label=f'n_points = {num}')
+#     # Configure axis settings
+#     ax.legend(); ax.set_xlabel('t'); ax.set_ylabel('X_t'); ax.grid(visible=True)
+#     return fig, ax
 
-    Returns:
-    ----------
-    idata: ArviZ InferenceData object
-        The converted MCMC algorithm.
-    """
-    chain = alg.chain
-    iscontinuousdiscete = hasattr(alg.fk, 'cdssm')
-    T = len(alg.fk.data)
+# def to_idata(alg, name=None):
+#     """
+#     Converts an X_MCMC object to an ArviZ InferenceData object. 
+    
+#     Also accessible as a method to the X_MCMC class.
+    
+#     Inputs:
+#     ----------
+    
+#     alg: X_MCMC object
+#         The MCMC algorithm to convert.
+#     name: str (optional): The name of the algorithm to convert into an idata object.
 
-    # Preprocess x chain into a (T, niter) / (T, niter, dimX) array
-    # CDSSM case
-    x = chain.x
-    if iscontinuousdiscete:
-        dx = 1 if x[x.dtype.names[-1]].ndim == 2 else x[x.dtype.names[-1]].shape[2]
-        if alg.fk.cdssm.isobservedat0:
-            obs_times = [alg.fk.cdssm.S(t) for t in range(T)]
-            init_x = chain.init_x
-            x_arr = np.concatenate([init_x['0.0'][:, np.newaxis], x[x.dtype.names[-1]]], axis=1)        
-        else:
-            obs_times = [alg.fk.cdssm.S(t) for t in range(1, T+1)] 
-            x_arr = chain.x[x.dtype.names[-1]] # Only store end points for now, consider changing this later
-        x_arr = x_arr[:, :, 0] if x_arr.ndim == 3 and dx == 1 else x_arr
-    # SSM case 
-    else:
-        dx = 1 if x.ndim == 2 else x.shape[2]
-        obs_times = np.arange(T)
-        x_arr = x
+#     Returns:
+#     ----------
+#     idata: ArviZ InferenceData object
+#         The converted MCMC algorithm.
+#     """
+#     chain = alg.chain
+#     iscontinuousdiscete = hasattr(alg.fk, 'cdssm')
+#     T = len(alg.fk.data)
+
+#     # Preprocess x chain into a (T, niter) / (T, niter, dimX) array
+#     # CDSSM case
+#     x = chain.x
+#     if iscontinuousdiscete:
+#         dx = 1 if x[x.dtype.names[-1]].ndim == 2 else x[x.dtype.names[-1]].shape[2]
+#         if alg.fk.cdssm.isobservedat0:
+#             obs_times = [alg.fk.cdssm.S(t) for t in range(T)]
+#             init_x = chain.init_x
+#             x_arr = np.concatenate([init_x['0.0'][:, np.newaxis], x[x.dtype.names[-1]]], axis=1)        
+#         else:
+#             obs_times = [alg.fk.cdssm.S(t) for t in range(1, T+1)] 
+#             x_arr = chain.x[x.dtype.names[-1]] # Only store end points for now, consider changing this later
+#         x_arr = x_arr[:, :, 0] if x_arr.ndim == 3 and dx == 1 else x_arr
+#     # SSM case 
+#     else:
+#         dx = 1 if x.ndim == 2 else x.shape[2]
+#         obs_times = np.arange(T)
+#         x_arr = x
         
-    # Preprocess observations into (T, ) / (T, dimY) array
-    y = alg.fk.data
-    dy = 1 if y[0].ndim == 1 else y[0].shape[1]
-    y_arr = np.concatenate(alg.fk.data, axis=0)
-    y_arr = y_arr.ravel() if dy == 1 else y_arr
+#     # Preprocess observations into (T, ) / (T, dimY) array
+#     y = alg.fk.data
+#     dy = 1 if y[0].ndim == 1 else y[0].shape[1]
+#     y_arr = np.concatenate(alg.fk.data, axis=0)
+#     y_arr = y_arr.ravel() if dy == 1 else y_arr
 
-    x_arr = x_arr[np.newaxis]
+#     x_arr = x_arr[np.newaxis]
     
-    # lib_attrs
+#     # lib_attrs
 
-    attrs = {
-    'inference_algorithm': alg.__class__.__name__,
-    'inference_library': 'particles_cdssm', 
-    'inference_library_version': '0.1.0', 
-    'fk_name': alg.fk.__class__.__name__,
-    'Nx': alg.Nx,
-    'niter': alg.niter,
-    'T': alg.fk.T,
-    'cpu_time': alg.cpu_time,
-    }
-    if 'ICSMC' in alg.__class__.__name__:
-        attrs['backward_step'] = str(alg.backward_step)
+#     attrs = {
+#     'inference_algorithm': alg.__class__.__name__,
+#     'inference_library': 'particles_cdssm', 
+#     'inference_library_version': '0.1.0', 
+#     'fk_name': alg.fk.__class__.__name__,
+#     'Nx': alg.Nx,
+#     'niter': alg.niter,
+#     'T': alg.fk.T,
+#     'cpu_time': alg.cpu_time,
+#     }
+#     if 'ICSMC' in alg.__class__.__name__:
+#         attrs['backward_step'] = str(alg.backward_step)
         
-    if iscontinuousdiscete:
-        cdssm_name = alg.fk.cdssm.__class__.__name__
-        model_sde_name = alg.fk.cdssm.model_sde.__class__.__name__
-        cdssm_attrs = {
-            'name': cdssm_name + '_' + model_sde_name,
-            'cdssm_name': cdssm_name,
-            'fk_sname': alg.fk.sname,
-            'num': alg.num,
-            'model_sde': model_sde_name
-            }
-        attrs.update(cdssm_attrs)
-    else:
-        ssm_name = alg.fk.ssm.__class__.__name__
-        fk_name = alg.fk.__class__.__name__
-        ssm_attrs = {
-            'name': ssm_name,
-            'ssm_name': ssm_name,
-            'fk_sname': fk_name
-            }
-        attrs.update(ssm_attrs)
+#     if iscontinuousdiscete:
+#         cdssm_name = alg.fk.cdssm.__class__.__name__
+#         model_sde_name = alg.fk.cdssm.model_sde.__class__.__name__
+#         cdssm_attrs = {
+#             'name': cdssm_name + '_' + model_sde_name,
+#             'cdssm_name': cdssm_name,
+#             'fk_sname': alg.fk.sname,
+#             'num': alg.num,
+#             'model_sde': model_sde_name
+#             }
+#         attrs.update(cdssm_attrs)
+#     else:
+#         ssm_name = alg.fk.ssm.__class__.__name__
+#         fk_name = alg.fk.__class__.__name__
+#         ssm_attrs = {
+#             'name': ssm_name,
+#             'ssm_name': ssm_name,
+#             'fk_sname': fk_name
+#             }
+#         attrs.update(ssm_attrs)
 
-    if name is not None:
-        attrs['name'] = name
+#     if name is not None:
+#         attrs['name'] = name
 
-    # Build InferenceData posterior
-    idata_post = az.from_dict(
-        posterior={"x": x_arr},
-        coords = {"time": obs_times},
-        dims={"x": ["time"] if dx == 1 else ["time", "dimX"]},
-        posterior_attrs = attrs,
-    )
+#     # Build InferenceData posterior
+#     idata_post = az.from_dict(
+#         posterior={"x": x_arr},
+#         coords = {"time": obs_times},
+#         dims={"x": ["time"] if dx == 1 else ["time", "dimX"]},
+#         posterior_attrs = attrs,
+#     )
 
-    # Build InferenceData observations
-    idata_obs = az.from_dict(
-        observed_data={"y": y_arr},
-        coords = {"time": obs_times},
-        dims={"y": ["time"] if dy == 1 else ["time", "dimY"]},
-    )
+#     # Build InferenceData observations
+#     idata_obs = az.from_dict(
+#         observed_data={"y": y_arr},
+#         coords = {"time": obs_times},
+#         dims={"y": ["time"] if dy == 1 else ["time", "dimY"]},
+#     )
 
-    idata = az.InferenceData(posterior=idata_post.posterior, observed_data=idata_obs.observed_data, attrs=attrs)
-    idata.observed_data.attrs = idata_post.attrs.copy()
-    return idata
+#     idata = az.InferenceData(posterior=idata_post.posterior, observed_data=idata_obs.observed_data, attrs=attrs)
+#     idata.observed_data.attrs = idata_post.attrs.copy()
+#     return idata
 
 def build_cdssm(cdssm_spec):
     """

@@ -10,13 +10,13 @@ Univariate API (dimX=1, dimY=1)
 --------------
 - CDSSM:            For use when the model SDE is an instance of 'sdes.SDE'. This class uses a simplified API for when dimX=1 and dimY=1. 
                         Abstract class: Needs to be subclassed with 'PY' and optionally, 'LY' and 'SigmaY' and 'proposal0' methods defined.
-- GaussianCDSSM:    A special case of the CDSSM where the observation density is additive Gaussian noise.
+- NormalCDSSM:    A special case of the CDSSM where the observation density is additive Gaussian noise.
 
 Multivariate API (dimX>1, dimY>1 and dimX = 1, dimY>1, dimX>1, dimY=1)
 --------------
 - MvCDSSM:          For use when the model SDE is an instance of 'sdes.MvSDE'.  
                     Abstract class: Needs to be subclassed with 'PY' and optionally, 'LY' and 'SigmaY' and 'proposal0' methods defined.
-- MvGaussianCDSSM:  A special case of the CDSSM where the observation density is additive Gaussian noise.
+- MvNormalCDSSM:  A special case of the CDSSM where the observation density is additive Gaussian noise.
 
 
 A CDSSM is initialised (__init__) by:
@@ -49,13 +49,13 @@ And, optionally:
 """
 Additional feature: building Linear, Gaussian CD-SSMs: 
 
-Feature for `GaussianCDSSM` and `MvGaussianCDSSM` classes:
+Feature for `NormalCDSSM` and `MvNormalCDSSM` classes:
 
 The underlying discrete time state space model is a time homogeneous, Linear, Gaussian State Space Model (LGSSM)
 When the following conditions hold: 
 
 1. The model SDE is a Linear SDE
-2. We have a Gaussian CDSSM (i.e Linear, Gaussian observation density)
+2. We have a Normal CDSSM (i.e Linear, Gaussian observation density)
 3. We start with an inital point x0, or a Gaussian initial distribution for x0
 4. Observation times are equidistant (ensures time homogeneity)
 
@@ -176,7 +176,7 @@ class CDSSMBase:
     def simulate_given_x(self, x):
         lag_x = [None] + x[:-1]
         return [
-            self.PY(t, xp, x).rvs(size=1) for t, (xp, x) in enumerate(zip(lag_x, x))
+            self.PY(t, xp, x[x.dtype.names[-1]]).rvs(size=1) for t, (xp, x) in enumerate(zip(lag_x, x))
         ]
 
     def simulate(self, T, num=1000):
@@ -261,7 +261,7 @@ class CDSSM(CDSSMBase):
         """
         return self._error_msg(self, "proposal0")
 
-class GaussianCDSSM(CDSSM):
+class NormalCDSSM(CDSSM):
 
     default_params = {'sigmaY': 1.}
                 
@@ -381,9 +381,9 @@ class MvCDSSM(CDSSMBase):
         """
         return self._error_msg(self, "proposal0")
             
-class MvGaussianCDSSM(MvCDSSM):
+class MvNormalCDSSM(MvCDSSM):
     """
-    Gaussian CDSSM that involves obsersations with Gaussian distributed noise:
+    Normal CDSSM that involves obsersations with Gaussian distributed noise:
     Dimension of observations is by default set to match that of the latent states.
     
     Y_t | E_t=e_t \sim N_d(Ge_t, \Cov_Y).
@@ -482,89 +482,4 @@ class MvGaussianCDSSM(MvCDSSM):
             'covY': self.covY # (dimY, dimY)
             }
         return MVLinearGauss(**mvlg_params)
-            
-            
-"""
-The following classes are now deprecated
-"""
 
-# class TimeSwitchingGaussianCDSSM(MvGaussianCDSSM):   
-#     """
-#     Not the most helpful CDSSM, but useful for testing purposes.
-#     This CDSSM is linear Gaussian but time inhomogeneous, so we use 
-#     'DisreteDiscreteSSM' as the discrete time proxy.
-#     """    
-#     @property
-#     def default_params(self):
-#         if self.dimX > 1:
-#             def_params = {'G_1': np.eye(self.dimX), 'G_2': np.eye(self.dimX), 
-#                           'covY_1': np.eye(self.dimX), 'covY_2': 0.1*np.eye(self.dimX), 't_switchY': 10}
-#         else:
-#             def_params = {'G_1': 1., 'covY_1': 1., 'G_2': 1., 'covY_2': 0.1*1., 't_switchY': 10}
-#         return def_params
- 
-#     def __init__(self, model_sde, x0=None, delta_s = 1., **kwargs):
-#         CDSSM.__init__(self, model_sde, x0, delta_s, **kwargs)
-#         self._check_L_CovY_dims(self.G_1, self.covY_1)
-#         self._check_L_CovY_dims(self.G_2, self.covY_2)
-#         if type(self.G_1) is np.ndarray:
-#             assert self.G_1.shape == self.G_2.shape, 'Shapes of G_1 and G_2 do not match'
-#         if type(self.covY_1) is np.ndarray:
-#             assert self.covY_1.shape == self.covY_2.shape, 'Shapes of CovY_1 and CovY_2 do not match'
-
-#     @property
-#     def dimY(self):
-#         return 1 if type(self.covY_1) == float else self.covY_1.shape[0]
-
-#     def LY(self, t):
-#         t = t+1
-#         return self.G_1 if t < self.t_switchY else self.G_2
-    
-#     def CovY(self, t):
-#         t = t+1
-#         return self.covY_1 if t < self.t_switchY else self.covY_2
-
-#     def discrete_ssm(self):
-#         """
-#         Returns a state space model that is a proxy for the CDSSM.
-#         Only possible when the latent SDE is Linear, so that the transition density is tractable.
-#         """
-#         if self.model_sde.isLinear:
-#                 discrete_ssm = DiscreteDiscreteSSM(self)
-#                 return discrete_ssm
-#         else: # There are edge case where the SDE has non-Gaussian transition density to think about in the future.
-#             return None
-        
-# class OU_CDSSM(GaussianCDSSM):
-
-#     BenchmarkSSMCls = LinearGauss
-
-#     @property
-#     def benchmark_ssm_params(self):
-#         """
-#         If the model SDE of a standard CDSSM is a linear SDE that can be solved analytically, one has
-#         access to the transition density of the diffusion, that is linear Gaussian. Thus, one can construct 
-#         a LGSSM. 
-#         """
-#         linear_gauss_params = {'sigmaY': self.eta,
-#                        'rho': self.model_sde._a(self.S(0), self.S(1)),
-#                        'sigmaX': np.sqrt(self.model_sde._v(self.S(0), self.S(1))), # Assume equidistant observations for now
-#                        'sigma0': np.sqrt(self.model_sde._v(self.S(0), self.S(1)))
-#                       }
-#         return linear_gauss_params
-
-# class Reparam_OU_CDSSM(OU_CDSSM):
-
-#     default_params = {'rho': 0.8187307530779818, 'sigmaX_2': 0.07417798964198115}
-#     # Corresponds to rho=0.3, mu=0., phi=0.3, eta_sq=0.01**2 in OU_CDSSM
-    
-#     def __init__(self, x0=0., delta_s = 1., **kwargs):
-#         StateSpaceModel.__init__(self, **kwargs)
-#         self.x0 = x0
-#         self.delta_s = delta_s
-#         model_sde_params = {'rho': -np.log(self.rho), 'mu': 0., 'phi': self.phi()}
-#         self.model_sde = self.ModelSDECls(**model_sde_params)
-#         self.eta_sq = 0.01 ** 2
-    
-#     def phi(self):
-#         return np.sqrt((-2.*np.log(self.rho) * self.sigmaX_2)/(1-self.rho**2))
