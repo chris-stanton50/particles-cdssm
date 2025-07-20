@@ -3,22 +3,16 @@ Feynman Kac module:
 
 In this module, we construct the Feynman Kac models for continuous-discrete state space models, which include reparameterisations.
 
-How to interact with the API:
-
-We have implemented the CDSSM_SMC class: 
-
-This is a subclass of SMC. We use this to run particle filters and smoothers for continuous-discrete state space models.
-The only difference between this class and the standard SMC class, is that we need to pass a CDSSM_FeynmanKac object to the __init__ method,
-and we need to provide the number of imputed points for simulation of SDEs.
-
 We have the following Feynman-Kac formalisms of continuous-discrete state space models: These are instances of CDSSM_FeynmanKac:
 
-- Bootstrap DA
+The options are below: 
+
+- BootstrapDA
 - BootstrapReparameterisedDA - provide an AuxiliaryBridge class
 - ForwardGuidedDA - provide a ForwardProposal class
 - BackwardGuidedDA - provide an EndPointProposal class, AuxiliaryBridge class
-- ForwardGuidedReparameterisedDA - provide a ForwardProposal class, AuxiliaryBridge class
-- BackwardGuidedReparameterisedDA - provide an EndPointProposal class, AuxiliaryBridge class # Only option for hypoelliptic case.
+- ForwardReparameterisedDA - provide a ForwardProposal class, AuxiliaryBridge class
+- BackwardReparameterisedDA - provide an EndPointProposal class, AuxiliaryBridge class # Only option for smoothing in hypoelliptic case.
 
 We provide to the __init__ method of these classes:
 
@@ -122,7 +116,7 @@ class CDSSM_FeynmanKac(FeynmanKac):
         `backward_sampling_reject`.
         
         For CDSSMs, logpt is the product of the potential G_t and the transition density of proposal kernel M_t.
-        It may not be possible to find an upper bound on the pathspace.
+        Currently not possible to find an upper bound on the pathspace.
         """
         raise NotImplementedError('Upper bound on logpt is not available for CDSSMs')
 
@@ -170,7 +164,7 @@ class ForwardProposalMixin:
 
     @property
     def default_proposal_sde_cls(self):
-        return axb.LocalLinearOUProp if self.is1d else axb.MvOUProposal
+        return axb.DriftBrownianProp if self.is1d else axb.MvDriftBrownianProp
 
     def _build_forward_proposal(self, t, x_start):
         if self.cdssm.isobservedat0:

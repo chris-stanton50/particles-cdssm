@@ -71,12 +71,12 @@ import particles_cdssm.continuous_discrete_ssms as cdssms
 import particles_cdssm.feynman_kac as cdfk
 
 
-rho=1.0; mu=-1.0; phi=0.2  # parameters of the Ornstein-Uhlenbeck process
+rho=1.0; mu=-1.0; phi=0.2  # parameters of the continuous process
 
 # Initial distribution
-initial_dist = dists.Normal(loc=mu, scale=phi/np.sqrt(2*rho))  # Initial distribution of the latent state
+initial_dist = dists.Normal(loc=mu, scale=phi/np.sqrt(2*rho))  
 
-# Define the Ornstein Uhlenbeck SDE
+# Define the Ornstein Uhlenbeck SDE class
 class OrnsteinUhlenbeck(sdes.SDE):
     
     default_params = {'rho': 1.0, 'mu': -1.0, 'phi': 0.1} 
@@ -89,14 +89,14 @@ class OrnsteinUhlenbeck(sdes.SDE):
 
 ou_sde = OrnsteinUhlenbeck(rho=rho, mu=mu, phi=phi)  # Ornstein-Uhlenbeck SDE    
 
-# Define the observation density as a method of a subclass of the CDSSM class: 
+# Define the observation density as a method of CDSSM:
 
 class StochVolCDSSM(cdssms.CDSSM):
     
     def PY(self, t, xp, x):
         return dists.Normal(loc=0., scale=np.exp(0.5 * x))
 
-sv_cdssm = StochVolCDSSM(ou_sde, x0=initial_dist) # Stochastic volatility continuous-discrete state-space model
+sv_cdssm = StochVolCDSSM(ou_sde, x0=initial_dist) # Stochastic volatility CDSSM:
 
 x, y = sv_cdssm.simulate(100)
 cd_fk_model = cdfk.BootstrapDA(cdssm = sv_cdssm, data=y)
@@ -104,8 +104,6 @@ cd_fk_model = cdfk.BootstrapDA(cdssm = sv_cdssm, data=y)
 alg = particles_cdssm.CDSSM_SMC(fk=cd_fk_model, N=100)
 alg.run()
 ```
-
-
 
 ## Some interesting applications for CD-SSMs:
 
@@ -122,7 +120,7 @@ alg.run()
 
 - *Forward Filtering Backward Sampling*
     - FFBS (Standard $\mathcal{O}(N^2)$ version)
-    - FFBS-MCMC (Linear cost $\mathcal{O}(N)$)
+    - FFBS-MCMC (Linear cost $\mathcal{O}(N)$ version)
 
 Bayesian parameter estimation via Particle MCMC and online smoothing algorithms are under development for next release. That's all for now: check out the docs if this interests you!
 

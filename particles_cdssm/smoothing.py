@@ -113,13 +113,13 @@ class CDSSM_ParticleHistory(ParticleHistory):
 
     def _backward_sampling_ON2(self, M):
         """
-        Generate trajectories without post-transform: used in MCMC algorithms (PG/PGBS)
+        Generate trajectories without post-transform: used in MCMC algorithms (iCSMC-BS/PGBS)
         """
         return super().backward_sampling_ON2(M)
     
     def _extract_one_trajectory(self):
         """
-        Generate trajectory without post-transform: used in MCMC algorithms (PG/PGBS)
+        Generate trajectory without post-transform: used in MCMC algorithms (iCSMC-BS/PGBS)
         """
         return super().extract_one_trajectory()
 

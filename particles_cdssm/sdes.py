@@ -2,16 +2,17 @@
 """
 SDEs module
 
-Define objects that represent the solutions of stochastic diffeeential equations (SDEs).
+Define objects that represent the solutions of stochastic differential equations (SDEs).
 
-To build an SDE, subclass one of the following:
+To build an SDE, subclass one of the following abstract base classes:
 
 - SDE: For SDEs such that dimX=dimW=1
 - MvEllipticSDE: For any other SDE with dimX=dimW>1 and an invertible diffusion coefficient
-- MvIntegratedSDE: For SDEs with dimX // 2 = dimW. The smooth component is an integral of hte rough component.
-- MvTwiceIntegratedSDE: For SDEs with dimX // 2 = dimW. The smooth components are twice integrals of the rough component. 
+- MvIntegratedSDE: For SDEs with dimX // 2 = dimW. The smooth component is an integral of the rough component.
+- MvTwiceIntegratedSDE: For SDEs with dimX // 2 = dimW. The smooth components are twice integrals of the rough component.
 
-In further development, one could 
+See the docstrings of the classes for further details.
+
 Examples of Univariate SDEs:
 
 1. SinDiffusion: SDE with a sinusoidal drift and constant diffusion
@@ -22,8 +23,6 @@ Examples of LinearSDEs:
 
 1. BrownianMotion: SDE of the Brownian Motion
 2. OrnsteinUhlenbeck: The Ornstein-Uhlenbeck SDE
-3. TVOrnsteinUhlenbeck: Time varying Ornstein Uhlenbeck process
-4. BrownianBridge: Brownian Bridge SDE
 
 Examples of Multivariate LinearSDEs:
 
@@ -31,7 +30,6 @@ Examples of Multivariate LinearSDEs:
 2. MvBrownianMotion: Multivariate Brownian Motion SDE
 3. MvOrnsteinUhlenbeck: Multivariate Ornstein-Uhlenbeck SDE
 4. MvIndependentOrnsteinUhlenbeck: Multivariate Independent Ornstein-Uhlenbeck SDE
-5. MvFullOrnsteinUhlenbeck: Multivariate Full Ornstein-Uhlenbeck SDE. Evaluates Matrix exponential.
 """
 
 import math
@@ -168,7 +166,40 @@ class SDE(SDEBase):
     dimX = 1
     dimW = 1
     numerical_scheme_cls = EulerMaruyama
+    """
+    Abstract base class for 1D SDEs. To create an SDE, the following methods need to be defined:
 
+    To define an SDE, the following methods need to be defined:
+    
+    b: The drift coefficient
+    sigma: The diffusion coefficient
+    
+    The drift and diffusion coefficients may depend on parameters: default parameters 
+    should be defined in class attribute `default_params`:
+    
+    Example:
+    -----------
+
+    class ArctanDiffusion(SDE):
+
+        default_params = {'alpha': -2.,
+                        'beta': 0.,
+                        'phi': 0.75}
+        
+        def b(self, t, x):
+            return self.alpha * np.arctan(x) + self.beta
+        
+        def sigma(self, t, x):
+            return self.phi
+
+    Optionally, one can also define: 
+
+    db: First derivative of the drift coefficient.
+    dsigma: First derivative of the diffusion coefficient.
+    
+    In the context of continuous-discrete modelling, defining db 
+    allows one to define more informative automatic proposals in SMC algorithms.
+    """
     def b(self, t: float, x: np.ndarray):
         """
         **Mandatory Function**
@@ -217,7 +248,7 @@ class SDE(SDEBase):
         ------------
         db (float/np.ndarray): float / (N,) array of db values
         """
-        return NotImplementedError(self._error_msg('db'))
+        raise NotImplementedError(self._error_msg('db'))
 
     def dsigma(self, t: float, x):
         """
@@ -339,8 +370,7 @@ class LogisticDiffusion(SDE):
     s: Noise intensity
     
     A reasonable initial condition is X_0 = K/10
-    """
-    
+    """    
     default_params = {'r': 0.5,
                       'K': 100,
                       's': 0.1}
@@ -361,32 +391,9 @@ class LogisticDiffusion(SDE):
 
 class LinearSDE(SDE):
     """
-    Linear SDE, of the form:
+    Abstract base class for one dimensional Linear SDEs, of the form:
 
     $$dX_t = [A(t) + B(t)X_t] dt + C(t)dW_t$$
-
-
-    The following methods from `SDE` are automatically defined:
-    
-    'b'
-    'sigma'
-    'db'
-    'dsigma'    
-    'transition_dist' 
-    'optimal_proposal_dist'
-
-    Includes the additional methods:
-    'log_px' -  Log transition density of X(t) | X(s).
-    'grad_log_px' - Grad of log transition density of X(t) | X(s).
-    'grad_log_py' - Grad of log transition density of Y_t | X(s). Assumes a linear Gaussian observation density. 
-    'exact_simulate' - Exact simulation from the Linear SDE
-
-    Many of the above new methods depend on the transition density of the linear SDE, which is 
-    linear, Gaussian, given by:
-
-    p_{s,t}(x_t| x_s) = \phi(x_t, a x_s + b, v)
-
-    a, b and v correspond to _a, _b and _v methods.
 
     To subclass a linear SDE, we need to define the following methods:
     
@@ -397,6 +404,32 @@ class LinearSDE(SDE):
     '_a(s, t)': Coefficient of x_s in transition density mean function.
     '_b(s, t)': Additive constant in transition density mean function.
     '_v(s, t)': Transition density variance
+
+    Many of the above new methods depend on the transition density of the linear SDE, which is 
+    linear, Gaussian, given by:
+
+    p_{s,t}(x_t| x_s) = \phi(x_t, a x_s + b, v)
+
+    a, b and v correspond to _a, _b and _v methods.
+
+    Once the above methods are defined, the following methods are automatically defined:
+    
+    'b'
+    'sigma'
+    'db'
+    'dsigma'    
+    'transition_dist' 
+    'optimal_proposal_dist'
+
+    We also have the following additional methods for Linear SDEs:
+    
+    'log_px' -  Log transition density of X(t) | X(s).
+    'grad_log_px' - Grad of log transition density of X(t) | X(s).
+    'grad_log_py' - Grad of log transition density of Y_t | X(s). Assumes a linear Gaussian observation density. 
+    'exact_simulate' - Exact simulation from the Linear SDE
+    
+    Note that `grad_log_px` and `grad_log_py` are used in the drift term 
+    of proposal SDEs in the context of building proposals SDEs for SMC algorithms.
     """
     exact_scheme = LinearExact
 
@@ -460,17 +493,22 @@ class LinearSDE(SDE):
     
     def grad_log_px(self, s: float, t: float, x_s: np.ndarray, x_t: np.ndarray):
         """
-        Gradient of the log transition density
+        Gradient of the log transition density of the Linear SDE
+        
+        Inputs
+        ------------
+        s (float): start time
+        t (float): end time
+        x_s (float/np.ndarray): float or (N,) array of current states
+        x_t (float/np.ndarray): float or (N,) array of end states
+    
+        Returns
+        ------------
+        grad_log_px (np.ndarray): float or (N,) array of `grad_log_px` values.
+
         """
-
-        # When simulating:
-
-        # s: float
-        # t: float
-        # x_s: (N, )
-        # x_t: (N, )
-
-        return grad_log_linear_gaussian(x_s, x_t, self._a(s, t), self._b(s, t), self._v(s, t))
+        grad_log_px = grad_log_linear_gaussian(x_s, x_t, self._a(s, t), self._b(s, t), self._v(s, t))
+        return grad_log_px
 
     def _vec_grad_log_px(self, s: float, t: float, x_s: np.ndarray, x_t: np.ndarray):
         """
@@ -490,36 +528,57 @@ class LinearSDE(SDE):
         """
         return grad_grad_log_linear_gaussian(self._a_vec(s, t), self._b_vec(s, t), self._v_vec(s, t))
     
-    def grad_log_py(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: float, sigmaY: float):
+    def grad_log_py(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: float, sigmaY: float):        
         """
-        Gradient of the log transition density of Y_t | X(s), where Y_t | E_t \sim N(Le_t, \sigma_Y^2)
+        Gradient of the log transition density of an observation Y_t | X(s), where Y_t | E_t \sim N(Le_t, \sigma_Y^2)        
+        
+        Inputs
+        ------------
+        s (float): start time
+        t (float): end time
+        x_s (float/np.ndarray): float or (N,) array of current states
+        y_t (float/np.ndarray): float or (1,) array of observation
+        LY (float): scaling factor for the observation
+        sigmaY (float): noise level for the observation
 
+        Returns
+        ------------
+        grad_log_py (np.ndarray): float or (N,) array of `grad_log_py` values.
+        """
         # When simulating:
 
         # s: float
         # t: float
         # x_s: (N, ) 
-        # y_t: (1, ) / (1, dimY)
-        # eta_sq: float / (dimY, dimY)
-        """
+        # y_t: (1, ) 
+        # eta_sq: float
         v = (LY**2)*self._v(s, t) + (sigmaY ** 2)
-        return grad_log_linear_gaussian(x_s, y_t, LY*self._a(s, t), LY*self._b(s, t), v)
+        grad_log_py = grad_log_linear_gaussian(x_s, y_t, LY*self._a(s, t), LY*self._b(s, t), v)
+        return grad_log_py
 
     def grad_grad_log_py(self, s: float, t: float, y_t: np.ndarray, LY: float, sigmaY: float):
         """
-        Second derivative of the gradient of the log transition density of Y_t | X(s), where Y_t | E_t \sim N(Le_t, \sigma_Y^2)
-        s: float
-        t: float
-        y_t: (1, ) / (1, dimY)
-        LY: float / (dimY, 1)
-        sigmaY: float / (dimY, dimY)
+        Gradient of the log transition density of an observation Y_t | X(s), where Y_t | E_t \sim N(Le_t, \sigma_Y^2)        
+        
+        Inputs
+        ------------
+        s (float): start time
+        t (float): end time
+        y_t (float/np.ndarray): float or (1,) array of observation
+        LY (float): scaling factor for the observation
+        sigmaY (float): noise level for the observation
+
+        Returns
+        ------------
+        grad_grad_log_py (np.ndarray): float or (N,) array of `grad_grad_log_py` values.
         """
         v = (LY**2)*self._v(s, t) + sigmaY ** 2
-        return grad_grad_log_linear_gaussian(self._a(s, t), self._b(s, t), v)
-    
+        grad_grad_log_py = grad_grad_log_linear_gaussian(LY*self._a(s, t), LY*self._b(s, t), v)
+        return grad_grad_log_py
+
     def _vec_grad_log_py(self, s: float, t: float, x_s: np.ndarray, y_t: np.ndarray, LY: float, sigmaY: float):
         """
-        When implementing a Girsanov integral:
+        (Used when implementing a path integral):
 
         s (num+1, )
         t: float ()
@@ -746,89 +805,89 @@ class OrnsteinUhlenbeck(LinearSDE):
     def _dv_dmu(self, s, t):
         return 0.
     
-class TVOrnsteinUhlenbeck(OrnsteinUhlenbeck):
-    """
-    Time varying Ornstein Uhlenbeck process to use to test the smoothing algorithms:
+# class TVOrnsteinUhlenbeck(OrnsteinUhlenbeck):
+#     """
+#     Time varying Ornstein Uhlenbeck process to use to test the smoothing algorithms:
     
-    $dX_t = \rho(\mu - X_t)dt + C(t) dW_t$
+#     $dX_t = \rho(\mu - X_t)dt + C(t) dW_t$
 
-    Where C(t) = \phi_1 for t \in [0,1]
-               = \phi_2 for t > 1 
-    """
-    default_params = {'rho': 0.2,
-                      'mu': 0.,
-                      'phi_1': 0.3,
-                      'phi_2': 0.1
-                      }
+#     Where C(t) = \phi_1 for t \in [0,1]
+#                = \phi_2 for t > 1 
+#     """
+#     default_params = {'rho': 0.2,
+#                       'mu': 0.,
+#                       'phi_1': 0.3,
+#                       'phi_2': 0.1
+#                       }
     
-    def C(self, t):
-        return self.phi_1 * (t < 1) + self.phi_2 *(t >= 1) 
+#     def C(self, t):
+#         return self.phi_1 * (t < 1) + self.phi_2 *(t >= 1) 
         
-    def C_vec(self, t):
-        return self.vec_phi_1 * (t < 1) + self.vec_phi_2 * (t >= 1)
+#     def C_vec(self, t):
+#         return self.vec_phi_1 * (t < 1) + self.vec_phi_2 * (t >= 1)
 
-    def _v(self, s, t):
-        return (s>=1)*self._v_s_geq1(s, t) + (t <= 1)*self._v_t_leq1(s, t) + (s<1) * (t>1) * self._v_t_else(s, t)
+#     def _v(self, s, t):
+#         return (s>=1)*self._v_s_geq1(s, t) + (t <= 1)*self._v_t_leq1(s, t) + (s<1) * (t>1) * self._v_t_else(s, t)
     
-    def _v_s_geq1(self, s, t):
-        return ((self.phi_2 ** 2)/(2*self.rho)) * (1 - np.exp(-2.*self.rho*(t-s)))
+#     def _v_s_geq1(self, s, t):
+#         return ((self.phi_2 ** 2)/(2*self.rho)) * (1 - np.exp(-2.*self.rho*(t-s)))
     
-    def _v_t_leq1(self, s, t):
-        return ((self.phi_1 ** 2)/(2*self.rho)) * (1 - np.exp(-2.*self.rho*(t-s)))
+#     def _v_t_leq1(self, s, t):
+#         return ((self.phi_1 ** 2)/(2*self.rho)) * (1 - np.exp(-2.*self.rho*(t-s)))
     
-    def _v_t_else(self, s, t):
-            v_t  = (self.phi_2 ** 2)* (1 - np.exp(-2.*self.rho*(t-1.)))
-            v_t += (self.phi_1 ** 2)* (np.exp(-2.*self.rho*(t-1.)) - np.exp(-2.*self.rho*(t-s)))
-            v_t = v_t/(2.*self.rho)
-            return v_t
+#     def _v_t_else(self, s, t):
+#             v_t  = (self.phi_2 ** 2)* (1 - np.exp(-2.*self.rho*(t-1.)))
+#             v_t += (self.phi_1 ** 2)* (np.exp(-2.*self.rho*(t-1.)) - np.exp(-2.*self.rho*(t-s)))
+#             v_t = v_t/(2.*self.rho)
+#             return v_t
     
-    def _v_vec(self, s, t):
-        return (s>=1)*self._v_s_geq1_vec(s, t) + (t <= 1)*self._v_t_leq1_vec(s, t) + (s<1) * (t>1) * self._v_t_else_vec(s, t)
+#     def _v_vec(self, s, t):
+#         return (s>=1)*self._v_s_geq1_vec(s, t) + (t <= 1)*self._v_t_leq1_vec(s, t) + (s<1) * (t>1) * self._v_t_else_vec(s, t)
     
-    def _v_s_geq1_vec(self, s, t):
-        return ((self.vec_phi_2 ** 2)/(2*self.vec_rho)) * (1 - np.exp(-2.*self.vec_rho*(t-s)))
+#     def _v_s_geq1_vec(self, s, t):
+#         return ((self.vec_phi_2 ** 2)/(2*self.vec_rho)) * (1 - np.exp(-2.*self.vec_rho*(t-s)))
     
-    def _v_t_leq1_vec(self, s, t):
-        return ((self.vec_phi_1 ** 2)/(2*self.vec_rho)) * (1 - np.exp(-2.*self.vec_rho*(t-s)))
+#     def _v_t_leq1_vec(self, s, t):
+#         return ((self.vec_phi_1 ** 2)/(2*self.vec_rho)) * (1 - np.exp(-2.*self.vec_rho*(t-s)))
     
-    def _v_t_else_vec(self, s, t):
-            v_t  = (self.vec_phi_2 ** 2)* (1 - np.exp(-2.*self.vec_rho*(t-1.)))
-            v_t += (self.vec_phi_1 ** 2)* (np.exp(-2.*self.vec_rho*(t-1.)) - np.exp(-2.*self.vec_rho*(t-s)))
-            v_t = v_t/(2.*self.vec_rho)
-            return v_t
+#     def _v_t_else_vec(self, s, t):
+#             v_t  = (self.vec_phi_2 ** 2)* (1 - np.exp(-2.*self.vec_rho*(t-1.)))
+#             v_t += (self.vec_phi_1 ** 2)* (np.exp(-2.*self.vec_rho*(t-1.)) - np.exp(-2.*self.vec_rho*(t-s)))
+#             v_t = v_t/(2.*self.vec_rho)
+#             return v_t
 
-class BrownianBridge(LinearSDE):
-    """
-    dX_t = \frac{x^* - X_t}{T-t}dt + dW_t
+# class BrownianBridge(LinearSDE):
+#     """
+#     dX_t = \frac{x^* - X_t}{T-t}dt + dW_t
 
-    The Brownian Bridge SDE.
+#     The Brownian Bridge SDE.
 
-    Parameters:
-    End point: x^*
-    End time: T (This bit could be reformulated so that this is a Bridge construction)
+#     Parameters:
+#     End point: x^*
+#     End time: T (This bit could be reformulated so that this is a Bridge construction)
 
-    This definition could be extended to add a general constant in the diffusion coefficient:
-    """
-    default_params = {'x_end': 0.,
-                      'T': 1.}
+#     This definition could be extended to add a general constant in the diffusion coefficient:
+#     """
+#     default_params = {'x_end': 0.,
+#                       'T': 1.}
         
-    def A(self, t):
-        self.x_end/(self.T - t)
+#     def A(self, t):
+#         self.x_end/(self.T - t)
 
-    def B(self, t):
-        return -1./(self.T - t)
+#     def B(self, t):
+#         return -1./(self.T - t)
     
-    def C(self, t):
-        return 1.
+#     def C(self, t):
+#         return 1.
 
-    def _a(self, s, t):
-        return (self.T - t)/(self.T-s)
+#     def _a(self, s, t):
+#         return (self.T - t)/(self.T-s)
 
-    def _b(self, s, t):
-        return (t-s)/(self.T - s) * self.x_end
+#     def _b(self, s, t):
+#         return (t-s)/(self.T - s) * self.x_end
         
-    def _v(self, s, t):
-        return (t-s)*(self.T-t)/(self.T - s)
+#     def _v(self, s, t):
+#         return (t-s)*(self.T-t)/(self.T - s)
     
 #---------------------------------- Abstract Base Classes of Multivariate SDEs ----------------------------------
 #---------------------- Includes Base Classes for both the Elliptic and Hypoelliptic Case -----------------------
@@ -917,7 +976,50 @@ class MvSDE(SDEBase):
         return self.dimX // (self.n_smooth + 1)
 
 class MvEllipticSDE(MvSDE):
+    """
+    Abstract base class for elliptic multivariate SDEs. We have dimX=dimW, and a the diffusion 
+    covariance matrix (\sigma \sigma^T) is of full rank.
 
+    To define an MvEllipticSDE, the following methods need to be defined:
+    
+    b: The drift coefficient: Should map numpy arrays from (N, dimX) to (N, dimX) (see docstrings for these methods).
+    sigma: The diffusion coefficient
+    
+    One should also define the class attributes:
+    
+    `dimX` : The dimension of the diffusion (also the dimension of the noise process)
+    `default_params`: A dictionary of default parameters for the SDE.
+            
+    Example:
+    -----------
+
+    class LotkaVolterra(MvEllipticSDE):
+
+        dimX = 2
+        default_params = {'alpha': 0.1,
+                        'beta': 0.02,
+                        'delta': 0.01,
+                        'gamma': 0.5,
+                        's': np.array([0.1, 0.1])}
+        
+        def b(self, t, x):
+            x_1 = self.alpha * x[:, 0] - self.beta * x[:, 0] * x[:, 1] # (N, )
+            x_2 = self.delta * x[:, 0]*x[:, 1] - self.gamma * x[:, 1] # (N, )
+            return np.stack([x_1, x_2], axis=1)
+
+        def sigma(self, t, x):
+            N = x.shape[0]
+            diag_sigma = x*self.s # (N, 2)
+            return np.stack([np.diag(diag_sigma[i]) for i in range(N)], axis=0)
+
+    Optionally, one can also define: 
+
+    db: First derivative of the drift coefficient.
+    dsigma: First derivative of the diffusion coefficient.
+    
+    In the context of continuous-discrete modelling, defining db 
+    allows one to define more informative automatic proposals in SMC algorithms.
+    """
     n_smooth = 0
     
     def b(self, t: float, x: np.ndarray):
@@ -988,7 +1090,6 @@ class MvEllipticSDE(MvSDE):
         raise NotImplementedError(self._error_msg('dsigma'))
 
 class HypoellipticSDE(MvSDE):
-
     """
     Base class for Hypoelliptic SDEs.
     
@@ -997,11 +1098,6 @@ class HypoellipticSDE(MvSDE):
     
     'b_rough'
     'sigma_rough'
-
-    One must also define the class attribute `_diag_cov`. In the case of a hypoelliptic SDE, this is 
-    only set to True if the covariance matrix of the rough components is diagonal. In the case where 
-    there is only 1 rough component, it will be true (automatically overwritten as instance attribute in
-    this).
     """
     numerical_scheme_cls = HypoellipticEulerMaruyama
     
@@ -1023,7 +1119,8 @@ class HypoellipticSDE(MvSDE):
         return np.concatenate([x[:, -self.dimS:], self.b_rough(t, x)], axis=1)
     
     def sigma(self, t, x):
-        return np.concatenate([np.zeros((self.N, self.dimS, self.dimX)), self.sigma_rough(t, x)], axis=1)
+        N = x.shape[0]
+        return np.concatenate([np.zeros((N, self.dimS, self.dimW)), self.sigma_rough(t, x)], axis=1)
 
     def db(self, t, x): # (N, dimX, dimX)
         raise NotImplementedError(self._error_msg('db'))
@@ -1036,19 +1133,60 @@ class HypoellipticSDE(MvSDE):
 
 class IntegratedSDE(HypoellipticSDE):
     """
-    To define a non-linear Integrated (Hypoelliptic) SDE:
-    
-    - Subclass integrated SDE, and define the following:
+    The Integrated SDE is one of 2 available abstract base classes for hypoelliptic SDEs:
 
-    # Must be defined:    
-    `dimX` as a class attribute: must be a multiple of 2.
-    _diag_cov: Indicator for whether the diffusion covariance matrix of the rough component is diagonal.
-    `b_rough` and `sigma_rough` methods: the drift and diffusion coefficients for the rough component.
-        Outputs must have dimension (N, dimW) and (N, dimW, dimW) respectively.
-
-    #Optionally:
-    `default_params`: dictionary of default parameters for the SDE.
+    An Integrated SDE is of the form:
     
+    $$dX_{t, S} = X_{t, R} dt$$
+    $$dX_{t, R} = b_{rough}(t, X_{t, R}) dt + \sigma_{rough}(t, X_{t, R})dW_t$$
+
+    X_{t, R} is the rough component of the SDE, and X_{t, S} is the smooth component.
+    They are each of the same dimension, the smooth component is the integral of the rough component.
+    These SDEs naturally arise in problems where the SDE is modelling a dynamical system.
+
+    To define an IntegratedSDE, the following class attributes need to be defined:
+
+    `dimX`: The dimension of the full diffusion (smooth + rough). Must be a multiple of 2.
+    `default_params`: A dictionary of default parameters for the SDE.
+
+    One should also define the methods:
+
+    `b_rough`: The drift coefficient of the rough component: Should map numpy arrays from (N, dimX) to (N, dimW) (see docstrings for these methods).
+    `sigma_rough`: The diffusion coefficient of the rough component: Should map numpy arrays from (N, dimX) to (N, dimW, dimW).
+            
+            
+    Example:
+    -----------
+    class QuadraticDrag(IntegratedSDE):
+        dimX = 2
+        default_params = {'alpha': 1.,
+                        'F': 4.,
+                        'phi': 0.3,
+                        }
+        
+        def b_rough(self, t, x):
+            x_2 =  self.F - self.alpha * np.square(x[:, 1]) # (N, )
+            return x_2.reshape(-1, 1)
+
+        def sigma_rough(self, t, x):
+            N = x.shape[0]
+            return self.phi * np.ones((N, 1, 1))  # (N, 1, 1)
+        
+        def db_rough(self, t, x):
+            x_2 =  -2. * self.alpha * x[:, 1] # (N, )
+            return x_2.reshape(-1, 1)
+        
+        def dsigma_rough(self, t, x):
+            N = x.shape[0]
+            return np.zeros((N, 1, 1, 1))
+
+    Optionally, one can also define:
+    
+    `db_rough`: First derivative of the drift coefficient of the rough component.
+    `dsigma_rough`: First derivative of the diffusion coefficient of the rough component. 
+    
+    In the context of continuous-discrete modelling, defining `db_rough` then defines `db`,   
+    thus allowing one to define more informative automatic proposals in SMC algorithms.
     """
     n_smooth = 1
 
@@ -1086,7 +1224,6 @@ class TwiceIntegratedSDE(HypoellipticSDE):
 
     # Must be defined:    
     `dimX` as a class attribute: must be a multiple of 3.
-    _diag_cov: Indicator for whether the diffusion covariance matrix of the rough component is diagonal.
     `b_rough` and `sigma_rough` methods: the drift and diffusion coefficients for the rough component.
         Outputs must have dimension (N, dimW) and (N, dimW, dimW) respectively.
 
@@ -1135,7 +1272,7 @@ class TwiceIntegratedSDE(HypoellipticSDE):
         """
         raise NotImplementedError(self._error_msg('sigma_rough'))
 
-#--------------------------------------------- Examples of Multivariate SDEs -------------------------------------------
+#--------------------------------------------- Examples of Multivariate Elliptic SDEs -------------------------------------------
 
 class FitzHughNagumo(MvEllipticSDE):
     """
@@ -1165,12 +1302,6 @@ class FitzHughNagumo(MvEllipticSDE):
         db_2_dx_2 = np.array([-1.]*N)
         db = np.stack([db_1_dx_1, db_1_dx_2, db_2_dx_1, db_2_dx_2], axis=1).reshape(N, 2, 2)
         return db
-
-    # def db_diag(self, t, x):
-    #     N = x.shape[0]
-    #     db_1_dx_1 = self.rho[0] * (3 * (x[:, 0] ** 2) + 1) # (N, )
-    #     db_2_dx_2 = np.array([-1.]*N) #(N, )
-    #     return np.stack([db_1_dx_1, db_2_dx_2], axis=1) # (N, 2)
         
     def dsigma(self, t, x):
         N = x.shape[0]
@@ -1208,10 +1339,55 @@ class LotkaVolterra(MvEllipticSDE):
         return np.stack([x_1, x_2], axis=1)
 
     def sigma(self, t, x):
-        N = x.shape[0]
-        diag_sigma = x*self.s # (N, 2)
-        return np.stack([np.diag(diag_sigma[i]) for i in range(N)], axis=0)
+        diag_sigma = x*self.s # (N, 2)        
+        return np.einsum('ni,ij->nij', diag_sigma, np.eye(2))
+
+#--------------------------------------------- Examples of Multivariate Integrated SDE -------------------------------------------
+
+class QuadraticDrag(IntegratedSDE):
+    """
+    The Quadratic Drag model is a simple SDE that describes the 
+    motion of a particle under the influence of a quadratic drag force. 
     
+    The drag force could come from e.g air/water resistance.
+
+    dX_{1, t} = V_t dt
+    dX_{2, t} = (F - \alpha X_{2, t}^2) dt + \phi dW_t
+
+    X_1: Displacement of the particle
+    X_2: Velocity of the particle
+
+    The parameters are:
+
+    F: External force acting on the particle
+    \alpha : drag coefficient,
+    \phi: noise intensity.
+    """
+    dimX = 2
+    default_params = {'alpha': 1.,
+                      'F': 4.,
+                      'phi': 0.3,
+                      }
+    
+    def b_rough(self, t, x):
+        x_2 =  self.F - self.alpha * np.square(x[:, 1]) # (N, )
+        return x_2.reshape(-1, 1)
+
+    def sigma_rough(self, t, x):
+        N = x.shape[0]
+        return self.phi * np.ones((N, 1, 1))  # (N, 1, 1)
+    
+    def db_rough(self, t, x):
+        x_2 =  -2. * self.alpha * x[:, 1] # (N, )
+        return x_2.reshape(-1, 1)
+    
+    def dsigma_rough(self, t, x):
+        N = x.shape[0]
+        return np.zeros((N, 1, 1, 1))
+    
+
+
+#--------------------------------------------- Examples of Multivariate Twice Integrated SDE -------------------------------------------
 
 #---------------------------------- Abstract Base Classes for Multivariate Elliptic Linear SDEs ----------------------------------
 
@@ -1219,7 +1395,7 @@ class MvLinearSDE(MvSDE):
     """
     Multivariate linear SDEs. These objects are used in forward and backward proposals within DA particle filters.
     
-    When initialised, the __init__method should do the following things:
+    When initialised, the __init__ method should do the following things:
     - Check that the parameters of the SDE, given the above are well-defined.
     
     Also, make a note of how the input parameters are used build the linear SDE.
@@ -1672,70 +1848,70 @@ class MvOrnsteinUhlenbeck(MvIndepOrnsteinUhlenbeck):
         cov = (diff_cov/rho_sums) * (1 - np.exp(-rho_sums*(t-s))) # (N, dimX, dimX)
         return cov
 
-class MvFullOrnsteinUhlenbeck(MvOrnsteinUhlenbeck):
-    """
-    Multivariate Ornstein-Uhlenbeck process, given by:
-    dX_t  = \rho(\mu - X_t) dt + \phi dW_t
+# class MvFullOrnsteinUhlenbeck(MvOrnsteinUhlenbeck):
+#     """
+#     Multivariate Ornstein-Uhlenbeck process, given by:
+#     dX_t  = \rho(\mu - X_t) dt + \phi dW_t
     
-    With \rho a dxd matrix
-    \mu a 1xd vector
-    and \phi a dxd matrix
+#     With \rho a dxd matrix
+#     \mu a 1xd vector
+#     and \phi a dxd matrix
     
-    Input parameters: 
-    'rho': (N, dimX, dimX)/(dimX, dimX) matrix of reversion rates
-    'mu': (N, dimX) vector of means
-    'phi': (N, dimX, dimX)/(dimX, dimX) diffusion matrix
+#     Input parameters: 
+#     'rho': (N, dimX, dimX)/(dimX, dimX) matrix of reversion rates
+#     'mu': (N, dimX) vector of means
+#     'phi': (N, dimX, dimX)/(dimX, dimX) diffusion matrix
     
-    WARNING: Evaluation of the matrix exponential is required.
+#     WARNING: Evaluation of the matrix exponential is required.
     
-    To do: Implement the _v(s,t) method for this class. 
-    Requires a general expression for the covariance matrix of the random vector
-    \int_{s}^t {exp[-\rho(t-u)]\phi} dW_u
+#     To do: Implement the _v(s,t) method for this class. 
+#     Requires a general expression for the covariance matrix of the random vector
+#     \int_{s}^t {exp[-\rho(t-u)]\phi} W_u
     
-    Where \rho is a dxd matrix so we have a matrix exponential, \phi is dxd matrix and W_t is a dx1 Brownian motion.
-    """ 
+#     Where \rho is a dxd matrix so we have a matrix exponential, \phi is dxd matrix and W_t is a dx1 Brownian motion.
+#     """ 
 
-    @property
-    def default_params(self):
-        N, dx = self.N, self.dimX
-        default_params = {'rho': 0.5*np.eye(N) if N == 1 else np.stack([0.5*np.eye(dx)]*N),
-                    'mu': np.zeros((N, dx)),
-                    'phi': np.eye(N) if N == 1 else np.stack([np.eye(dx)]*N)
-                }
-        return default_params
+#     @property
+#     def default_params(self):
+#         N, dx = self.N, self.dimX
+#         default_params = {'rho': 0.5*np.eye(N) if N == 1 else np.stack([0.5*np.eye(dx)]*N),
+#                     'mu': np.zeros((N, dx)),
+#                     'phi': np.eye(N) if N == 1 else np.stack([np.eye(dx)]*N)
+#                 }
+#         return default_params
     
-    @property
-    def param_shapes(self):
-        N, dx = self.N, self.dimX
-        return {'rho': [(N, dx, dx), (dx, dx)], 'mu': [(N, dx)], 'phi': [(N, dx, dx), (dx, dx)]}
+#     @property
+#     def param_shapes(self):
+#         N, dx = self.N, self.dimX
+#         return {'rho': [(N, dx, dx), (dx, dx)], 'mu': [(N, dx)], 'phi': [(N, dx, dx), (dx, dx)]}
 
-    def A(self, t):
-        return np.einsum('ijk,ik->ij', self.rho, self.mu)
+#     def A(self, t):
+#         return np.einsum('ijk,ik->ij', self.rho, self.mu)
     
-    def B(self, t):
-        return -self.rho
+#     def B(self, t):
+#         return -self.rho
 
-    def C(self, t):
-        C = self.s.reshape((self.N, self.dimX, self.dimX)) if self.N == 1 else self.s
-        return C
+#     def C(self, t):
+#         C = self.s.reshape((self.N, self.dimX, self.dimX)) if self.N == 1 else self.s
+#         return C
 
-    def _a(self, s, t):
-        """
-        Should be a (N, dimX, dimX) matrix.
-        """
-        return sla.expm(-self.rho*(t-s))
+#     def _a(self, s, t):
+#         """
+#         Should be a (N, dimX, dimX) matrix.
+#         """
+#         return sla.expm(-self.rho*(t-s))
     
-    def _b(self, s, t):
-        """
-        Should be a (N, dimX) vector.
-        """
-        return np.einsum('ijk,ik->ij', np.stack([np.eye(self.dimX)]*self.N) - sla.expm(-self.rho*(t-s)), self.mu)
+#     def _b(self, s, t):
+#         """
+#         Should be a (N, dimX) vector.
+#         """
+#         return np.einsum('ijk,ik->ij', np.stack([np.eye(self.dimX)]*self.N) - sla.expm(-self.rho*(t-s)), self.mu)
     
-    def _v(self, s, t):
-        """
-        Should be an (N, dimX, dimX) matrix.
-        """
-        return NotImplementedError(self._error_msg('_v'))
+#     def _v(self, s, t):
+#         """
+#         Should be an (N, dimX, dimX) matrix.
+#         """
+#         return NotImplementedError(self._error_msg('_v'))
 
 #---------------------------------- Abstract Base Classes for Multivariate Hypoelliptic Linear SDEs ----------------------------------
 
@@ -1947,8 +2123,7 @@ class HypoellipticBrownianMotion(HypoellipticIndepBrownianMotion):
 class HypoellipticIndepOrnsteinUhlenbeck(HypoellipticLinearSDE):
     """
     Cannot be used without subclassing and defining the attribute 'n_smooth'
-    """    
-
+    """
     @property
     def default_params(self):
         N, dw = self.N, self.dimW

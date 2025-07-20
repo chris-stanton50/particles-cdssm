@@ -10,13 +10,13 @@ Univariate API (dimX=1, dimY=1)
 --------------
 - CDSSM:            For use when the model SDE is an instance of 'sdes.SDE'. This class uses a simplified API for when dimX=1 and dimY=1. 
                         Abstract class: Needs to be subclassed with 'PY' and optionally, 'LY' and 'SigmaY' and 'proposal0' methods defined.
-- NormalCDSSM:    A special case of the CDSSM where the observation density is additive Gaussian noise.
+- NormalCDSSM:    A special case of the CDSSM where the observation density is additive Normal noise.
 
 Multivariate API (dimX>1, dimY>1 and dimX = 1, dimY>1, dimX>1, dimY=1)
 --------------
 - MvCDSSM:          For use when the model SDE is an instance of 'sdes.MvSDE'.  
                     Abstract class: Needs to be subclassed with 'PY' and optionally, 'LY' and 'SigmaY' and 'proposal0' methods defined.
-- MvNormalCDSSM:  A special case of the CDSSM where the observation density is additive Gaussian noise.
+- MvNormalCDSSM:  A special case of the CDSSM where the observation density is additive Normal noise.
 
 
 A CDSSM is initialised (__init__) by:

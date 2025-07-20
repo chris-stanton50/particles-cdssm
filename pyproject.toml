@@ -28,7 +28,8 @@ classifiers = [
 ]
 
 [project.license]
-license = {file = "LICENSE"}
+text = "MIT License"
+files = ["LICENSE"]
 
 [project.urls]
 repository = "https://github.com/chris-stanton50/particles-cdssm/"
@@ -36,6 +37,7 @@ repository = "https://github.com/chris-stanton50/particles-cdssm/"
 [project.optional-dependencies]
 extra = [
     "pandas",
+    "dill",
     "statsmodels",
     "ipython",
     "seaborn",
