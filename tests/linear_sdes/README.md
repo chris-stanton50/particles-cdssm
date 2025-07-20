@@ -7,7 +7,8 @@ These tests are build with Python's `unittest` module.
 To run the tests:
 
 `python -m unittest test_linear_sdes.py` 
-
+or 
+`source run_linear_sde_tests.sh`
 
 The following types of SDEs are working correctly:
 

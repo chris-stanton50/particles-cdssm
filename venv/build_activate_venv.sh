@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Build the virtual environment for the project
-python3 -m venv ./particles_cdssm
+python -m venv ./particles_cdssm
 source ./particles_cdssm/bin/activate
 pip install --upgrade pip
 pip install -r ../requirements.txt
