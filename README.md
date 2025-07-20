@@ -154,35 +154,21 @@ This package is under active development - for any issues, bugs or frustrations,
 
 # Setup Instructions
 
-### venv
+Clone the repository, then you can setup your virtual environment from `./venv` directory as follows (assuming `python` points to python3.11 or above on your bash/zsh):
 
-Reproducibility for this repo is managed through a virtual environment. After the cloning the repository, build the virtual environment locally through the following commands:
 
-(Ensuring that `python` refers to Python 3.11.10 (if not, on Mac brew install python3.11, then use `python3.11` instead)), inside the directory of the cloned repository: 
+```shell
+# Build the virtual environment for the project
+python -m venv ./particles_cdssm
+source ./particles_cdssm/bin/activate
+pip install --upgrade pip
+pip install -r ../requirements.txt
 
-- Make a folder for the venv: `mkdir venv` (the folder venv is already in the `.gitignore` file)
-- Create the venv `python -m venv ./venv/particles_cdssm`
-- Activate the venv by sourcing the activate script: `source ./venv/diffusions/bin/activate`
-- Upgrade pip in your virtual environment `pip install --upgrade pip`
-- Install all dependencies in the venv `pip install -r requirements.txt`
+# Add the project itself to the virtual environment using a .pth file
+PROJECT_ROOT=$(cd .. && pwd)
+SITE_PACKAGES=$(python -c 'import site; print([p for p in site.getsitepackages() if "site-packages" in p][0])')
 
-All of the above steps can be run by sourcing the `build_venv.sh` script.
+echo "$PROJECT_ROOT" > "$SITE_PACKAGES/particles_cdssm.pth"
+```
 
-To delete the created virtual environment, simply decactivate it then recursively delete the folder in which the packages were created.
-
-`rm -rf venv`
-
-### Add repo to the Python path
-
-Currently, the repo has not been made into a package using a wheel file. So, after cloning the repository, the location of the repository needs to be added to the python path to import modules from the project:
-To do this, run the following shell command in the terminal, or add the following line to the `.zshrc` (Mac) or `.bashrc` (Linux) file:
-
- `export PYTHONPATH=$PYTHONPATH:~/location/of/cloned_repository/particles-cdssm/`
-
-You are now ready to use the package. Ensure that you have the created `particles-cdssm` virtual environment activated when trying to use the package. It can be activated with the following command from the home directory:
-
-`source ./venv/particles-cdssm/bin/activate`
-
-You could alias this for faster activation with the command:
-
-`alias activate_particles_cdssm="source ~/path/from/home/to_repository/particles-cdssm/venv/diffusions/bin/activate"`
+The second part ensures that this package itself is also loaded into the virtual environment (see the script `./venv/build_activate_venv.sh`)
