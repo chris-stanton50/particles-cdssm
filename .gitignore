@@ -10,23 +10,33 @@
 *.ipynb_checkpoints
 /dist/
 
-# Files in development not included in the first release:
+# Results of tests under development
+/tests/smoothing_mcmc/results
+/tests/smoothing/results
+
+#  # Files in development not included in the first release:
+
+# These are all commited on the `dev` branch. When merging with master, 
+# some may be omitted:
 
 # Tests
-/tests/smoothing_mcmc
-/tests/smoothing
-/tests/running
-/tests/profiling
-/tests/filtering/filtering_test_results.ipynb
-/tests/linear_sdes/test_iou_4_dims_correlated_noise.py
-/tests/linear_sdes/filtering_test_results.ipynb
+# /tests/smoothing_mcmc
+# /tests/smoothing
+# /tests/running
+# /tests/profiling
+# /tests/filtering/filtering_test_results.ipynb
+# /tests/linear_sdes/test_iou_4_dims_correlated_noise.py
+# /tests/linear_sdes/filtering_test_results.ipynb
 
-# dev tutorials
-/docs/notebooks/integrated_sde_tutorial.ipynb
-/docs/notebooks/multivariate_sde_tutorial.ipynb
+# # dev tutorials
+# /docs/notebooks/integrated_sde_tutorial.ipynb
+# /docs/notebooks/multivariate_sde_tutorial.ipynb
 
-# Not included in first release
-/particles_cdssm/deprecated
+# # Not included in first release
+# /particles_cdssm/deprecated
 
-# Particle MCMC related files (to be added in next release)
-/particles_cdssm/mcmc.py
+# # Particle MCMC related files (to be added in next release)
+# /particles_cdssm/mcmc.py
+
+# # Tutorial notebooks
+/docs/notebooks/
