@@ -5,6 +5,7 @@ particles==0.4
 
 # In plot.py and for notebooks
 matplotlib==3.10.3
+seaborn==0.13.2
 
 # For running filtering tests
 pandas==2.3.1
