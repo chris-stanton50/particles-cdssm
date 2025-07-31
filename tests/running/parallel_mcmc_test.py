@@ -4,7 +4,7 @@ import particles.state_space_models as ssms
 from particles.kalman import LinearGauss
 from particles.utils import multiplexer
 
-from particles_cdssm.cdssm_lib import build_cdssm
+from cdssm_lib import CDSSM_LIB
 from particles_cdssm.mcmc import PIMH, CDSSM_PIMH, ICSMC, CDSSM_ICSMC, mcmc_worker
 from particles_cdssm.state_space_models import DiscreteDiscreteSSM
 import particles_cdssm.feynman_kac as sfk

@@ -3,7 +3,11 @@ particles==0.4
 
 # Optional dependencies
 
+# For mcmc algorithm results
+arviz==0.22.0
+
 # In plot.py and for notebooks
+ipykernel==6.30.0
 matplotlib==3.10.3
 seaborn==0.13.2
 

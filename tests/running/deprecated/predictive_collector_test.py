@@ -1,13 +1,16 @@
+#!/usr/bin/env python3
 import numpy as np
+
 from particles.kalman import MVLinearGauss, LinearGauss
-
 import particles.state_space_models as ssms
-from particles.core import SMC
+from particles import SMC
 
-from particles_cdssm.core import CDSSM_SMC
-from particles_cdssm.cdssm_lib import CDSSM_LIB, build_cdssm
+import particles_cdssm
 import particles_cdssm.feynman_kac as sfk
 import particles_cdssm.collectors as cols
+
+from particles_cdssm.tools import build_cdssm
+from cdssm_lib import CDSSM_LIB
 
 # Define params for the length of the dataset/number of particles:
 T=10; N=10; num=10
@@ -42,11 +45,10 @@ for ssm_name, fk in all_fks.items():
 
 # Build the cdssm
 cdssm_strs = ['ou', 'mv_ou', 'iou']
-# cdssm_strs = ['ou']
 
 for cdssm_str in cdssm_strs:
     cdssm_spec = CDSSM_LIB[cdssm_str]
-    cdssm = build_cdssm(cdssm_str, False)
+    cdssm = build_cdssm(cdssm_spec)
 
     # Simulate synthetic data from the cdssm
     x, y = cdssm.simulate(T)
@@ -56,10 +58,9 @@ for cdssm_str in cdssm_strs:
 
     for fk_name, fk in all_cdssm_fks.items():
         for col in collectors:
-            smc = CDSSM_SMC(fk=fk, N=N, store_history=False, collect=[col], num=num)
+            smc = particles_cdssm.CDSSM_SMC(fk=fk, N=N, store_history=False, collect=[col], num=num)
             print(f"Running CDSSM_SMC for Model:{cdssm_str} FK: {fk_name} with Collector:{col.__class__.__name__}")
             smc.run()
 
 
 print("All tests completed successfully.")
-

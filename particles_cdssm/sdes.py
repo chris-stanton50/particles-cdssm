@@ -1377,13 +1377,14 @@ class QuadraticDrag(IntegratedSDE):
         N = x.shape[0]
         return self.phi * np.ones((N, 1, 1))  # (N, 1, 1)
     
-    def db_rough(self, t, x):
-        x_2 =  -2. * self.alpha * x[:, 1] # (N, )
-        return x_2.reshape(-1, 1)
+    # To do: Correct these methods
+    # def db_rough(self, t, x):
+    #     x_2 =  -2. * self.alpha * x[:, 1] # (N, )
+    #     return x_2.reshape(-1, 1)
     
-    def dsigma_rough(self, t, x):
-        N = x.shape[0]
-        return np.zeros((N, 1, 1, 1))
+    # def dsigma_rough(self, t, x):
+    #     N = x.shape[0]
+    #     return np.zeros((N, 1, 1, 1))
     
 
 

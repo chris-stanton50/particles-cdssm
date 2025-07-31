@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 """
-Test for the filtering: 
+Filtering experiment for linear SDEs for the paper: 
 
-Runs an experiment to test that particle filters, run using `cdssm_smc` are impelmented correctly.
+Can be run with the command:
+
+python filtering_experiment.py 10 mv_ou 
+
+(runs experiment on CD-SSM mv_ou with noise level 0.1)
+
+Saves the results in the ./results directory.
 """
 
 import time
 import dill
+import os
 import numpy as np
-import pandas as pd
 import sys
 
-from particles import SMC, multiSMC
+from particles import multiSMC
 from particles.collectors import Moments
 import particles.state_space_models as ssms
 from particles.kalman import Kalman
@@ -25,17 +31,22 @@ import particles_cdssm.feynman_kac as sfk
 from utils import kalman_results_to_frame, multismc_results_to_df
 from cdssm_lib import CDSSM_LIB
 
-T=10; N=100
+T=100; N=100
 nruns_smc = 96; nruns_cdssm_smc = 96
 num=50
 seed = True
-
 
 if not len(sys.argv) >= 3:
     raise ValueError('Please provide a run_id and cdssm_string as an argument when running the script.')
 
 run_id = int(sys.argv[1])
 cdssm_str = str(sys.argv[2])
+
+noise_level = (run_id % 100)/100 # 110 becomes 0.1
+if noise_level == 0.:
+    CDSSM_LIB[cdssm_str]['cdssm_params']['covY'] = CDSSM_LIB[cdssm_str]['high_noise_param']
+else:
+    CDSSM_LIB[cdssm_str]['cdssm_params']['covY'] = (noise_level ** 2) * CDSSM_LIB[cdssm_str]['high_noise_param']
 
 # run_id =30
 # cdssm_str = 'iou'
@@ -45,6 +56,8 @@ cdssm_spec = CDSSM_LIB[cdssm_str]
 
 cdssm = build_cdssm(cdssm_spec)
 is1d = not isinstance(cdssm, MvCDSSM)
+
+print(f'CD-SSM params: {cdssm.params}')
 
 if seed:
     np.random.seed(cdssm_spec['seed'])
@@ -76,27 +89,6 @@ else:
 
     print('Kalman filter runs complete.')
 
-# print(f'Running benchmark guided particle filter with N={benchmark_N} and QMC for each noise level:')
-
-# # Define FK/SMC objects with the ddssms at each noise level. Use a guided pf and QMC, with large N.
-# benchmark_fks = [ssms.GuidedPF(ssm=ddssm, data=y_s[i]) for i, ddssm in enumerate(ddssms)]
-# benchmark_algs = [SMC(fk=fk, N=benchmark_N, qmc=True, collect=[Moments]) for fk in benchmark_fks]
-
-# # Run the algorithms
-# for benchmark_alg in benchmark_algs:
-#     benchmark_alg.run()
-
-# # Extract the filtering means and marginal likelihood at time T from the Kalman filter:
-# if isinstance(cdssms[0], MvCDSSM):
-#     for i in range(cdssm.model_sde.dimX):
-#         true_vals_df_dict[f'true_T_{i+1}_pf'] = [benchmark_alg.summaries.moments[-1]['mean'][i] for benchmark_alg in benchmark_algs]
-# else:
-#     true_vals_df_dict[f'true_T_pf'] = [benchmark_alg.summaries.moments[-1]['mean'] for benchmark_alg in benchmark_algs]
-# true_vals_df_dict['logLt_pf'] = [benchmark_alg.summaries.moments[-1]['mean'] for benchmark_alg in benchmark_algs]
-# print('Benchmark particle filter runs complete.')
-
-# results_df_1 = pd.DataFrame(true_vals_df_dict)
-
 part_1_cpu = time.perf_counter() - part_1_cpu
 print(f'Part 1 complete. Run time: {round(part_1_cpu, 2)} seconds.')
 
@@ -104,7 +96,6 @@ print(f'Part 1 complete. Run time: {round(part_1_cpu, 2)} seconds.')
 # Part 2: Run the multiSMC algorithm for Bootstrap and Guided PF
 part_2_cpu = time.perf_counter()
 print('Part 2: Running multiSMC for different noise levels:')
-
 
 # Extract the lgssm and synthetic data
 fks = {'Bootstrap': ssms.Bootstrap(ssm=lgssm, data=y), 'GuidedPF': ssms.GuidedPF(ssm=lgssm, data=y)}
@@ -122,11 +113,11 @@ part_3_cpu = time.perf_counter()
 print('Part 3: Running multiCDSSM_SMC:')
 
 # Generate all possible fk models for the given cdssm
-fks = sfk.gen_all_fk_models(cdssm, y, smoothing=False)
+fks = sfk.gen_fk_models(cdssm, y, smoothing=False, fk_names=cdssm_spec['fk_names'])
 
 # Run the multiCDSSM_SMC algorithm at the given noise level
 tic = time.perf_counter()
-results = multiCDSSM_SMC(nruns=nruns_cdssm_smc, nprocs=0, out_func=summaries, collect=[Moments], fk=fks, N=N, num=num)
+results = multiCDSSM_SMC(nruns=nruns_cdssm_smc, nprocs=0, out_func=summaries, collect=[Moments], fk=fks, N=N, num=num, ESSrmin=1.0)
 cpu = time.perf_counter() - tic
 results_df_3 = multismc_results_to_df(results, continuous_discrete=True)
 
@@ -150,12 +141,13 @@ metadata = {'N': N,
             }
 
 # Store data from the 4 parts:
+os.makedirs('./results', exist_ok=True)
 
-true_vals_df.to_json(f'./results/filtering_test_run_{run_id}_{cdssm_str}_part_1.json', index=False)
-results_df_2.to_json(f'./results/filtering_test_run_{run_id}_{cdssm_str}_part_2.json', index=False)
-results_df_3.to_json(f'./results/filtering_test_run_{run_id}_{cdssm_str}_part_3.json', index=False)
+true_vals_df.to_json(f'./results/filtering_exp_run_{run_id}_{cdssm_str}_part_1.json', index=False)
+results_df_2.to_json(f'./results/filtering_exp_run_{run_id}_{cdssm_str}_part_2.json', index=False)
+results_df_3.to_json(f'./results/filtering_exp_run_{run_id}_{cdssm_str}_part_3.json', index=False)
 
-with open(f'./results/filtering_test_run_{run_id}_{cdssm_str}_meta.pkl', 'wb') as f:
+with open(f'./results/filtering_exp_run_{run_id}_{cdssm_str}_meta.pkl', 'wb') as f:
     dill.dump(metadata, f)
     
 part_4_cpu = time.perf_counter() - part_4_cpu

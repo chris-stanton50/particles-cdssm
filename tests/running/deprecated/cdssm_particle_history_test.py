@@ -1,4 +1,5 @@
-from particles_cdssm.cdssm_lib import CDSSM_LIB, build_cdssm
+from cdssm_lib import CDSSM_LIB
+from particles_cdssm.tools import build_cdssm
 from particles_cdssm.core import CDSSM_SMC
 import particles_cdssm.feynman_kac as sfk
 
@@ -7,7 +8,7 @@ T = 5; N=10; num=10; M=5
 # Build the cdssm
 cdssm_str = 'ou'
 cdssm_spec = CDSSM_LIB[cdssm_str]
-cdssm = build_cdssm(cdssm_str, True)
+cdssm = build_cdssm(cdssm_spec)
 
 # Simulate synthetic data from the cdssm
 x, y = cdssm.simulate(T)

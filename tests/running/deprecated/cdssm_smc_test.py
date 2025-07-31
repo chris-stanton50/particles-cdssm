@@ -1,4 +1,5 @@
-from particles_cdssm.cdssm_lib import CDSSM_LIB, build_cdssm
+from cdssm_lib import CDSSM_LIB
+from particles_cdssm.tools import build_cdssm
 from particles_cdssm.core import CDSSM_SMC
 import particles_cdssm.feynman_kac as sfk
 

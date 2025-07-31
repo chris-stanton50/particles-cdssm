@@ -5,6 +5,17 @@ import numpy as np
 import numpy.linalg as nla
 
 def vec_eval(func, times, X):
+    """
+    Inputs:
+    ------------
+    func: A function with signature func(t, x) where t is a time and x is a sample path.
+    times: A 1D array of times (num+1, ) at which to evaluate the function.
+    X: A 3-D array of shape (num+1, N, dimX) representing N sample paths in state space.
+    
+    Returns:
+    ------------
+    func_vals: A 3-D array of shape (num+1, N, dimX)
+    """
     func_vals = np.stack([func(time, X[i]) for i, time in enumerate(times)], axis=0) # (num+1, N, dimX)
     return func_vals
     
@@ -223,10 +234,10 @@ def mv_log_van_der_meulen_schauer(X: np.ndarray, b, Cov, LinearSDE, step):
     def H(t, x):    
         return LinearSDE.grad_grad_log_px(t, Delta_s)
     funcs = [b, b_tilde, Cov, Cov_tilde, r, H]
-    b_s, b_tildes, covs, cov_tildes, r_s, H = [vec_eval(f, ts[:-1], X) for f in funcs]
+    b_s, b_tildes, covs, cov_tildes, r_s, H_s = [vec_eval(f, ts[:-1], X) for f in funcs]
     first_term = np.einsum('ijk,ijk->ij', b_s - b_tildes, r_s) # (num, N)
     r_r_T = np.einsum('ijk,ijl->ijkl', r_s, r_s) # (num, N, dimX, dimX)
-    second_term = np.einsum('ijkl,ijlm->ijkm', covs - cov_tildes, -H - r_r_T) # (num, N, dimX, dimX)
+    second_term = np.einsum('ijkl,ijlm->ijkm', covs - cov_tildes, -H_s - r_r_T) # (num, N, dimX, dimX)
     second_term = np.einsum('ijkk->ij', second_term) # Trace of each matrix: (num, N)
     phi = first_term - 0.5*second_term # (num, N)
     dts = ts[1:] - ts[:-1] # (num, )

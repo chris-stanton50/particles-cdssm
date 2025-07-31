@@ -3,12 +3,11 @@ import arviz as az
 import particles.state_space_models as ssms
 from particles.kalman import LinearGauss
 
-from particles_cdssm.cdssm_lib import build_cdssm
 from particles_cdssm.mcmc import PIMH, CDSSM_PIMH, ICSMC, CDSSM_ICSMC
 from particles_cdssm.state_space_models import DiscreteDiscreteSSM
 import particles_cdssm.feynman_kac as sfk
 import particles_cdssm.auxiliary_bridges as axb
-
+from cdssm_lib import build_cdssm
 
 # Data params
 T = 5

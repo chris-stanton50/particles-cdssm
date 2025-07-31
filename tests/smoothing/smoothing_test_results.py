@@ -13,7 +13,7 @@ from particles_cdssm.core import CDSSM_SMC, SMC
 import particles_cdssm.plot as splt
 import particles_cdssm.feynman_kac as sfk
 from particles_cdssm.cdssm_lib import CDSSM_LIB, build_cdssm
-from particles_cdssm.continuous_discrete_ssms import GaussianCDSSM, MvGaussianCDSSM
+from particles_cdssm.continuous_discrete_ssms import NormalCDSSM, MvNormalCDSSM
 import particles_cdssm.auxiliary_bridges as axb
 
 # This script is used to generate the results of the smoothing test

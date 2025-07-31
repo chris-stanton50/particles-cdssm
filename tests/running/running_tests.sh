@@ -1,9 +1,5 @@
-python cdssm_particle_history_test.py
-python cdssm_smc_test.py
-python mcmc_test.py
-python multiCDSSM_SMC_test.py
+python running_tests.py
 python parallel_mcmc_test.py
-python particle_history_test.py
-python predictive_collector_test.py
-python smoothing_worker_test.py
+python mcmc_test.py
+
 rm ./results/*

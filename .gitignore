@@ -14,6 +14,10 @@
 /tests/smoothing_mcmc/results
 /tests/smoothing/results
 
+# Results of the experiments
+/paper/linear_sde_filtering/results
+/paper/linear_sde_smoothing/results
+
 #  # Files in development not included in the first release:
 
 # These are all commited on the `dev` branch. When merging with master, 
