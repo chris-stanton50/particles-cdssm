@@ -1386,7 +1386,42 @@ class QuadraticDrag(IntegratedSDE):
     #     N = x.shape[0]
     #     return np.zeros((N, 1, 1, 1))
     
+class IntegratedFitzhughNagumo(IntegratedSDE):
+    """
+    Integrated version of the FitzHugh-Nagumo model:
+    The recovery variable has been reparameterised so that the resulting diffusion process is 
+    an integrated SDE:
 
+    dX_{1, t} = X_{2,t} dt
+    dX_{2, t} = (1-\epsilon - 3 X_{1,t}^2)X_{2,t} dt + [(1-\gamma)X_{1,t} - X_{1,t}^3  - (\beta)]dt - \frac{\sigma}{\epsilon} dB_t
+
+
+    X_1: Action potential
+    X_2: First derivative of action potential
+
+    The parameters are:
+
+    - epsilon: the stiffness of the particle
+    - gamma: the damping coefficient
+    - beta: the external force applied to the particle
+    - sigma_u: the noise intensity
+    """
+    dimX = 2
+    default_params = {'epsilon': 0.1,
+                      'gamma': 1.5,
+                      'beta': 0.8,
+                      'sigma_u': 0.3
+                    }    
+
+    def b_rough(self, t, x):
+        x_2 =  (1 - self.epsilon - 3*np.square(x[:, 0])) * x[:, 1] # (N, )
+        x_2 += (1 - self.gamma) * x[:, 0] - np.power(x[:, 0], 3) - self.beta
+        x_2 *= 1/self.epsilon
+        return x_2.reshape(-1, 1) # (N, 1)
+
+    def sigma_rough(self, t, x):
+        N = x.shape[0]
+        return self.sigma_u/self.epsilon * np.ones((N, 1, 1))  # (N, 1, 1)
 
 #--------------------------------------------- Examples of Multivariate Twice Integrated SDE -------------------------------------------
 

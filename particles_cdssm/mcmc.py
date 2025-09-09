@@ -14,7 +14,6 @@ import particles_cdssm.feynman_kac as sfk
 from particles_cdssm.core import CDSSM_SMC, CDSSM_FeynmanKac
 from particles_cdssm.tools import to_idata
 
-
 """
 Smoothing (X_{1:T} | Y_{1:T}), with no involvement of the parameter.
 

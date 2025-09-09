@@ -9,6 +9,9 @@
 #ipynb checkpoints
 *.ipynb_checkpoints
 /dist/
+# Plots
+*.png
+*.pdf
 
 # Results of tests under development
 /tests/smoothing_mcmc/results
@@ -17,7 +20,7 @@
 # Results of the experiments
 /paper/linear_sde_filtering/results
 /paper/linear_sde_smoothing/results
-
+/paper/fhn_smoothing/results
 #  # Files in development not included in the first release:
 
 # These are all commited on the `dev` branch. When merging with master, 
