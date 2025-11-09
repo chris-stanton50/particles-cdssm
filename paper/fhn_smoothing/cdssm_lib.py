@@ -22,9 +22,9 @@ IFHN = {
                     'G': np.array([[1., 0.]]),
                     'covY': (0.01 ** 2) * np.eye(1) # This should be set to be quite low
                     },
-    'fk_names': ['BootstrapDA', 'BwG_NDBr_OUP', 'BwR_NDBr_OUP'],
+    'fk_names': ['BootstrapDA', 'BwG_NDBr_NDBrP', 'BwR_NDBr_NDBrP'],
     'seed': 3563,
-    'fk_names_map': {'BootstrapDA': 'Bootstrap', 'BwG_NDBr_OUP': 'Backward'}
+    'fk_names_map': {'BootstrapDA': 'Bootstrap', 'BwG_NDBr_NDBrP': 'Backward'}
     }
 
 CDSSM_LIB = {'ifhn': IFHN}

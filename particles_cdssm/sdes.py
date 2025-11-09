@@ -1138,7 +1138,7 @@ class IntegratedSDE(HypoellipticSDE):
     An Integrated SDE is of the form:
     
     $$dX_{t, S} = X_{t, R} dt$$
-    $$dX_{t, R} = b_{rough}(t, X_{t, R}) dt + \sigma_{rough}(t, X_{t, R})dW_t$$
+    $$dX_{t, R} = b_{rough}(t, X_t) dt + \sigma_{rough}(t)dW_t$$
 
     X_{t, R} is the rough component of the SDE, and X_{t, S} is the smooth component.
     They are each of the same dimension, the smooth component is the integral of the rough component.
@@ -1190,6 +1190,15 @@ class IntegratedSDE(HypoellipticSDE):
     """
     n_smooth = 1
 
+    def db(self, t, x): # (N, dimX, dimX)
+        N = x.shape[0]
+        I_dw = np.stack([np.eye(self.dimW)]*N)
+        zeros_dw = np.zeros((N, self.dimW, self.dimW))
+        db_1 = np.concatenate([zeros_dw, I_dw], axis=2) # # (N, dimW, dimX)
+        db_2 = self.db_rough(t, x) # (N, dimW, dimX)
+        db = np.concatenate([db_1, db_2], axis=1) # (N, dimX, dimX)
+        return db
+                        
     def b_rough(self, t, x):
         """
         Drift coefficient restricted to the rough component:
@@ -1202,10 +1211,17 @@ class IntegratedSDE(HypoellipticSDE):
 
     def db_rough(self, t, x):
         """
-        First derivative of the drift, restricted to the rough component
-        (i.e we take each rough component and evaluate its derivative w.r.t its rough component)
+        First derivative of the drift coefficient, restricted to the rough component
+        (i.e we take each rough component and evaluate its derivative w.r.t *all* components)
 
-        Output should be of the form (N, dimW, dimW)
+        Inputs
+        ------------
+        t (float): time
+        x (np.ndarray): (N, dimX) array of current states
+        
+        Returns
+        ------------
+        db_rough (np.ndarray): (N, dimW, dimX) array of partial derivatives of rough drift coefficient
         """
         raise NotImplementedError(self._error_msg('db_rough'))
     
@@ -1232,6 +1248,16 @@ class TwiceIntegratedSDE(HypoellipticSDE):
     
     """
     n_smooth = 2
+
+    def db(self, t, x): # (N, dimX, dimX)
+        N = x.shape[0]
+        I_dw = np.stack([np.eye(self.dimW)]*N)
+        zeros_dw = np.zeros((N, self.dimW, self.dimW))
+        db_1 = np.concatenate([zeros_dw, I_dw, zeros_dw], axis=2) # (N, dimW, dimX)
+        db_2 = np.concatenate([zeros_dw, zeros_dw, I_dw], axis=2) # (N, dimW, dimX)
+        db_3 = self.db_rough(t, x) # (N, dimW, dimX)
+        db = np.concatenate([db_1, db_2, db_3], axis=1) # (N, dimX, dimX)
+        return db
     
     def b_rough(self, t, x):
         """
@@ -1251,8 +1277,8 @@ class TwiceIntegratedSDE(HypoellipticSDE):
 
     def db_rough(self, t, x):
         """
-        Drift coefficient restricted to the rough component:
-        may also depend on the smooth component.
+        First derivative of the drift coefficient, restricted to the rough component
+        (i.e we take each rough component and evaluate its derivative w.r.t *all* components)
 
         Inputs
         ------------
@@ -1261,7 +1287,7 @@ class TwiceIntegratedSDE(HypoellipticSDE):
         
         Returns
         ------------
-        db_rough (np.ndarray): (N, dimW) array of rough drift coefficient values
+        db_rough (np.ndarray): (N, dimW, dimX) array of partial derivatives of rough drift coefficient
         """
         raise NotImplementedError(self._error_msg('db_rough'))
     
@@ -1395,7 +1421,6 @@ class IntegratedFitzhughNagumo(IntegratedSDE):
     dX_{1, t} = X_{2,t} dt
     dX_{2, t} = (1-\epsilon - 3 X_{1,t}^2)X_{2,t} dt + [(1-\gamma)X_{1,t} - X_{1,t}^3  - (\beta)]dt - \frac{\sigma}{\epsilon} dB_t
 
-
     X_1: Action potential
     X_2: First derivative of action potential
 
@@ -1423,6 +1448,145 @@ class IntegratedFitzhughNagumo(IntegratedSDE):
         N = x.shape[0]
         return self.sigma_u/self.epsilon * np.ones((N, 1, 1))  # (N, 1, 1)
 
+    def db_rough(self, t, x):
+        N = x.shape[0]
+        v = x[:, 0] # (N, )
+        z = x[:, 1] # (N, )
+        db_r_dv = (1-self.gamma - 3*np.square(v)- 6*v*z)/self.epsilon
+        db_r_dz = (1-self.epsilon -3*np.square(v))/self.epsilon
+        db_rough = np.stack([db_r_dv, db_r_dz], axis=1)
+        db_rough = db_rough.reshape(N, 1, -1)
+        return db_rough
+            
+    def mu_em(self, xp: np.ndarray, step: float):
+        """
+        Inputs
+        --------
+        xp: (N, dimX) np.ndarray
+        step: float
+        
+        Returns
+        --------
+        mu_em: (N, dimX) np.ndarray
+        """
+        b_rough = self.b_rough(0., xp).ravel()        
+        mu_v = xp[:, 0] + xp[:, 1] * step
+        mu_z = xp[:, 1] + b_rough*step
+        mu_em = np.stack([mu_v, mu_z], axis=1)
+        return mu_em
+
+    def mu_ldl(self, xp: np.ndarray, step: float):
+        """
+        Inputs
+        --------
+        xp: (N, dimX) np.ndarray
+        step: float
+        
+        Returns
+        --------
+        mu_em: (N, dimX) np.ndarray
+        """
+        b_rough = self.b_rough(0., xp).ravel()
+        half_step_sq = (step ** 2) / 2        
+        mu_v = xp[:, 0] + xp[:, 1] * step + b_rough * half_step_sq
+        mu_z = xp[:, 1] + b_rough*step
+        mu_ldl = np.stack([mu_v, mu_z], axis=1)
+        return mu_ldl
+    
+    def S_em(self, step):
+        """
+        Inputs
+        --------
+        step: float
+        
+        Returns
+        --------
+        S_em: (2, 2) np.ndarray
+        """
+        S_em = ((self.sigma_u/self.epsilon) ** 2) * np.array([[0., 0.], [0., step]], dtype=np.float64)
+        return S_em
+
+    def C_em(self, step):
+        """
+        Inputs
+        --------
+        step: float
+        
+        Returns
+        --------
+        C_em: (2, 2) np.ndarray
+        """
+        C_em = (self.sigma_u/self.epsilon) * np.array([[0., 0.], [0., np.sqrt(step)]], dtype=np.float64)
+        return C_em
+
+    def S_ldl(self, step):
+        """
+        Inputs
+        --------
+        step: float
+        
+        Returns
+        --------
+        S_ldl: (2, 2) np.ndarray
+        """
+        S_ldl =  ((self.sigma_u/self.epsilon) ** 2) * np.array([[(step ** 3)/3, (step ** 2)/2], [(step ** 2)/2, step]], dtype=np.float64)
+        return S_ldl
+
+    def C_ldl(self, step):
+        """
+        Inputs
+        --------
+        step: float
+        
+        Returns
+        --------
+        C_ldl: (2, 2) np.ndarray
+        """
+        C_ldl = np.linalg.cholesky(self.S_ldl(step))
+        return C_ldl
+
+    def step_em(self, xp: np.ndarray, step: float):
+        """
+        """
+        loc = self.mu_em(xp, step)
+        rt_cov = self.C_em(step)
+        return loc + np.matmul(np.random.normal(size=xp.shape), rt_cov.T)
+
+    def step_ldl(self, xp: np.ndarray, step: float):
+        loc = self.mu_ldl(xp, step)
+        rt_cov = self.C_ldl(step)
+        return loc + np.matmul(np.random.normal(size=xp.shape), rt_cov.T)
+    
+    def simulate_em(self, N: int, x_start: np.ndarray, delta_t=1., num=100):
+        """
+        N (int): Number of paths to simulate
+        x_start (np.ndarray): (N, 2) start points
+        delta_t (float): end of path simulation
+        num (int): Number of imputed points to use 
+        """
+        assert N == x_start.shape[0], 'N and x_start shapes must match'
+        simulations = np.empty((num, N, 2))
+        step = delta_t / num
+        simulations[0] = self.step_em(x_start, step)
+        for i in range(1, num):
+            simulations[i] = self.step_em(simulations[i-1], step)
+        return simulations
+
+    def simulate_ldl(self, N: int, x_start: np.ndarray, delta_t=1., num=100):
+        """
+        N (int): Number of paths to simulate
+        x_start (np.ndarray): (N, 2) start points
+        delta_t (float): end of path simulation
+        num (int): Number of imputed points to use 
+        """
+        assert N == x_start.shape[0], 'N and x_start shapes must match'
+        simulations = np.empty((num, N, 2))
+        step = delta_t / num
+        simulations[0] = self.step_ldl(x_start, step)
+        for i in range(1, num):
+            simulations[i] = self.step_ldl(simulations[i-1], step)
+        return simulations
+            
 #--------------------------------------------- Examples of Multivariate Twice Integrated SDE -------------------------------------------
 
 #---------------------------------- Abstract Base Classes for Multivariate Elliptic Linear SDEs ----------------------------------

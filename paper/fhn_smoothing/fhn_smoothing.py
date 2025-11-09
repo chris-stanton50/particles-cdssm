@@ -16,6 +16,7 @@ from utils import obs_times_to_store
 from particles_cdssm.tools import build_cdssm
 from particles_cdssm.mcmc import mcmc_worker
 import particles_cdssm.feynman_kac as sfk
+import particles_cdssm.auxiliary_bridges as axb
 import arviz as az
 
 if not len(sys.argv) >= 2:
@@ -38,8 +39,8 @@ print('Simulating synthetic data...')
 x, y = cdssm.simulate(T)
 
 fks = {'bootstrap': sfk.BootstrapDA(cdssm=cdssm, data=y),
-       'backward_guided': sfk.BackwardGuidedDA(cdssm=cdssm, data=y), 
-       'backward_reparameterised': sfk.BackwardReparameterisedDA(cdssm=cdssm, data=y)}
+       'backward_guided': sfk.BackwardGuidedDA(cdssm=cdssm, data=y, auxiliary_bridge_cls=axb.IntegratedNoDriftBrownianAuxBridge, end_pt_proposal_cls=axb.IntegratedNoDriftEndPointProposal), 
+       'backward_reparameterised': sfk.BackwardReparameterisedDA(cdssm=cdssm, data=y, auxiliary_bridge_cls=axb.IntegratedNoDriftBrownianAuxBridge, end_pt_proposal_cls=axb.IntegratedNoDriftEndPointProposal)}
 
 print(f'Running MCMC bootstrap in parallel...')
 out_boot = multiplexer(f=mcmc_worker, nruns=8, nprocs=0, seeding=True, fk=fks['bootstrap'], method=['icsmc'], niter=niter, Nx=Nx, num=num)

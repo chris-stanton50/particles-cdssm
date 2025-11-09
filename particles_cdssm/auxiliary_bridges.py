@@ -1407,6 +1407,12 @@ class IntegratedNaiveEndPointProposal(IntegratedLinearEndPointProposal, BuildBro
     sname='H1INDBBrP'
     any_cov = False
     drift = False
+
+class IntegratedNoDriftEndPointProposal(IntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
+    sname='H1INDBrP'
+    any_cov = True
+    full_cov = True
+    drift = False
         
 class IntegratedDriftBrownianEndPointProposal(IntegratedLinearEndPointProposal, BuildBrownianLinearSDE):
     sname='H1IDBrP'
