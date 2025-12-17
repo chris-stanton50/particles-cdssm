@@ -142,7 +142,7 @@ class EulerMaruyama(NumericalScheme):
             curr_t += delta_t
             W[t_s[-1]] = self._X_to_W_step(curr_t, W[t_s[-2]], X[t_s[-2]], X[t_s[-1]], delta_t)
         else:
-            W[t_s[-1]] = X[t_s[-1]]        
+            W[t_s[-1]] = X[t_s[-1]]
         return W
         
     def transform_W_to_X(self, W, t_start=0., x_start=0., transform_end_point=True):
