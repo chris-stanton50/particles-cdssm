@@ -6,7 +6,7 @@ We present a high level API below for the functions implemented within the `part
 
 The classes/functions listed below will comprise the first release version of the `particles_cdssm` package. 
 
-Particle-MCMC based classes remain under development.
+Particle-MCMC based classes that extend to parameter vector $\theta$ remain under development.
 
 ## Online Filtering ($X_t | Y_{1:t}=y_{1:t}: t \in \{1, \dots, T\}$)
 
@@ -42,26 +42,25 @@ Used to run `CDSSM_SMC` algorithms in parallel. To run `SMC` algorithms in paral
 - Genealogy Tracking (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_genealogy`)
 - FFBS-ON2 (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_ON2`)
 - FFBS-MCMC (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_mcmc`)
-
+- Parallel Smoothing (`particles_cdssm.core.smoothing_worker`)
 
 ## Particle-MCMC based Offline Smoothing ($X_{1:T} | Y_{1:T}=y_{1:T}$)
 
 ### Standard SSMs
 
-- Particle Independent Metropolis Hastings (PIMH) `particles_cdssm.mcmc.PIMH`
+- Particle Independent Metropolis Hastings (PIMH) (`particles_cdssm.mcmc.PIMH`)
 - Iterated Conditional Sequential Monte Carlo (iCSMC) `particles_cdssm.mcmc.ICSMC`
 - Parallel Particle MCMC `particles_cdssm.mcmc.mcmc_worker`
 
 ### CD-SSMs
 
-- Particle Independent Metropolis Hastings (PIMH) `particles_cdssm.mcmc.CDSSM_PIMH`
-- Iterated Conditional Sequential Monte Carlo (iCSMC) `particles_cdssm.mcmc.CDSSM_ICSMC`
-- Parallel Particle MCMC `particles_cdssm.mcmc.mcmc_worker`
+- Particle Independent Metropolis Hastings (PIMH) (`particles_cdssm.mcmc.CDSSM_PIMH`)
+- Iterated Conditional Sequential Monte Carlo (iCSMC) (`particles_cdssm.mcmc.CDSSM_ICSMC`)
+- Parallel Particle MCMC (`particles_cdssm.mcmc.mcmc_worker`)
 
 # For future development
 
 The items listed below will be a part of future developments:
-
 
 # Joint Offline Smoothing ($X_{1:t}, \theta | Y_{1:t}=y_{1:t}$)
 
