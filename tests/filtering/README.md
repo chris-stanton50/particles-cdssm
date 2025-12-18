@@ -47,7 +47,5 @@ For each of the CD-SSMs: the following steps happen:
 - The particle filter is run 96 times on each Feynman-Kac model, and the estimator $\hat{p}(y_{1:10})$ is stored for each run.
 - The MAE of the estimator: $E[|\hat{p}(y_{1:T}) - p(y_{1:T})]$ is calculated with confidence intervals for each of the Feynman-Kac models.
 
-The test to evaluate the performance is then to check the ordering of the performance of the different Feynman-Kac constructions: we adopt a low noise regime for all CD-SSMs, thus we expect the Bootstrap particle filter to be the worst performing. Using a form of guided proposal will improve the performance. Then, by using a better choice of Linear SDE in the choice of proposal, we further improve performance. The expected best and worst performing Feynman-Kac models are recorded for each of the 6 CD-SSMs in `cdssm_lib.py`.  
+The test to evaluate the performance is then to check the ordering of the performance of the different Feynman-Kac constructions: we adopt a low noise regime for all CD-SSMs, thus we expect the Bootstrap particle filter to be the worst performing. Using a form of guided proposal will improve the performance. Then, by using a better choice of Linear SDE in the choice of proposal, we further improve performance. The expected best and worst performing Feynman-Kac models are recorded for each of the 6 CD-SSMs in `cdssm_lib.py`. 
 
-
-    

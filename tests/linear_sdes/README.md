@@ -18,5 +18,6 @@ The following types of SDEs are working correctly:
 
 Tests still need to be developed in the following case:
 
-- The exception in the integrated SDE case above
+- The exception in the integrated SDE case above 
+    - The file `test_iou_4_dims_correlated_noise.py` is dedicated to this
 - All TwiceIntegratedLinear SDEs.
