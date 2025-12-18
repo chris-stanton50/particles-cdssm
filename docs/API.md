@@ -8,7 +8,7 @@ The classes/functions listed below will comprise the first release version of th
 
 Particle-MCMC based classes remain under development.
 
-## Online Filtering ($X_t | Y_{1:t}=y_{1:t}$)
+## Online Filtering ($X_t | Y_{1:t}=y_{1:t}: t \in \{1, \dots, T\}$)
 
 ### Standard SSMs
 
@@ -29,46 +29,39 @@ Particle-MCMC based classes remain under development.
 
 - Parallel Particle Filters (`particle_cdssm.core.multiCDSSM_SMC`)
 
-Used to run `CDSSM_SMC` algorithms in parallel. To run `SMC` algorithms in parallel, use 
-the corresponding function `particles.core.multiSMC` in the particles package.
+Used to run `CDSSM_SMC` algorithms in parallel. To run `SMC` algorithms in parallel, use the corresponding function `particles.core.multiSMC` in the particles package.
 
-## Offline Smoothing ($X_{1:t} | Y_{1:t}=y_{1:t}$)
+## Particle based Offline Smoothing ($X_{1:T} | Y_{1:T}=y_{1:T}$)
 
 ### Standard SSMs
 
-- Particle-based smoothers (other smoothers for standard SSMs are implemented in the particles package)
-    - Genealogy Tracking (`particles_cdssm.smoothing.backward_sampling_genealogy`)
+- Genealogy Tracking (`particles_cdssm.smoothing.backward_sampling_genealogy`)
 
+### CD-SSMs
+ 
+- Genealogy Tracking (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_genealogy`)
+- FFBS-ON2 (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_ON2`)
+- FFBS-MCMC (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_mcmc`)
+
+
+## Particle-MCMC based Offline Smoothing ($X_{1:T} | Y_{1:T}=y_{1:T}$)
+
+### Standard SSMs
+
+- Particle Independent Metropolis Hastings (PIMH) `particles_cdssm.mcmc.PIMH`
+- Iterated Conditional Sequential Monte Carlo (iCSMC) `particles_cdssm.mcmc.ICSMC`
+- Parallel Particle MCMC `particles_cdssm.mcmc.mcmc_worker`
 
 ### CD-SSMs
 
-- Particle-based smoothers 
-    - Genealogy Tracking (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_genealogy`)
-    - FFBS-ON2 (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_ON2`)
-    - FFBS-MCMC (`particles_cdssm.smoothing.CDSSM_ParticleHistory.backward_sampling_mcmc`)
-
-- Parallel Offline Smoothing (`particle_cdssm.core.smoothing_worker`)
-
-Implements a particle based smoothing method, either for standard `SSMs` or for `CD-SSMs` for multiple additive functions. 
-To be used in conjunction with `particles.utils.multiplexer` to run either `SMC` or `CDSSM_SMC` based smoothing algorithms in parallel.
+- Particle Independent Metropolis Hastings (PIMH) `particles_cdssm.mcmc.CDSSM_PIMH`
+- Iterated Conditional Sequential Monte Carlo (iCSMC) `particles_cdssm.mcmc.CDSSM_ICSMC`
+- Parallel Particle MCMC `particles_cdssm.mcmc.mcmc_worker`
 
 # For future development
 
 The items listed below will be a part of future developments:
 
-## Offline Smoothing ($X_{1:t} | Y_{1:t}=y_{1:t}$)
-
-### Standard SSMs
-
-- Particle MCMC-based smoothers
-    - PIMH (`particles_cdssm.mcmc.PIMH`)
-    - iCMSC (`particles_cdssm.mcmc.ICSMC`)
-
-### CD-SSMs
-
-- Particle MCMC-based smoothers
-    - PIMH (`particles_cdssm.mcmc.CDSSM_PIMH`) (*Under Development*)
-    - iCMSC (`particles_cdssm.mcmc.CDSSM_ICSMC`) (*Under Development*)
 
 # Joint Offline Smoothing ($X_{1:t}, \theta | Y_{1:t}=y_{1:t}$)
 
