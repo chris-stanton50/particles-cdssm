@@ -71,7 +71,43 @@ import numpy as np
 from scipy.stats import gaussian_kde
 
 from particles import resampling as rs
-from particles.collectors import Collector
+from particles.collectors import Collector, OnlineSmootherMixin
+
+class Online_smooth_MCMC(Collector, OnlineSmootherMixin):
+    """MCMC-based online smoothing.
+
+    Uses one step of an independent Metropolis kernel, where the proposal
+    is the multinomial distribution based on the weights. Has O(N) (deterministic)
+    complexity and it seems to work well, as explained in Dau & Chopin
+    (2022).
+
+    Parameters
+    ----------
+    nsteps : int,  default: 1
+        number of independent Metropolis steps
+
+    References
+    ----------
+    Dau, H.D. and Chopin, N. (2023). On the complexity of backward smoothing
+    algorithms, The Annals of Statistics, 51(5), 2145-2169
+    """    
+    signature = {'nsteps': 1}
+    
+    def update(self, smc):
+        prev_Phi = self.Phi.copy()
+        A = smc.A.copy()
+        self.Phi = (prev_Phi[A] + smc.fk.add_func(smc.t, self.prev_X[A], smc.X))/(self.nsteps+1)
+        for k in range(self.nsteps):
+            prop = rs.multinomial_iid(self.prev_W, M=smc.N)
+            lpr_acc = (smc.fk.logpt(smc.t, self.prev_X[prop], smc.X)
+                            - smc.fk.logpt(smc.t, self.prev_X[A], smc.X))
+            lu = np.log(np.random.rand(smc.N))
+            A = np.where(lu < lpr_acc, prop, A)
+            self.Phi += (prev_Phi[A] + smc.fk.add_func(smc.t, self.prev_X[A], smc.X))/(self.nsteps+1)
+        
+    def save_for_later(self, smc):
+        self.prev_X = smc.X
+        self.prev_W = smc.W    
 
 #-----------------------------------------------Base Class for Predictive Collectors--------------------------------------------------------
 
