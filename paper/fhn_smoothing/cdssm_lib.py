@@ -6,7 +6,7 @@ import particles_cdssm.sdes as sdes
 from particles_cdssm.continuous_discrete_ssms import MvNormalCDSSM
 
 
-#---------------------IntegratedOrnsteinUhlenbeck + MvNormalCDSSM---------------------------
+#---------------------IntegratedFitzhughNagumo + MvNormalCDSSM---------------------------
 
 IFHN = {
     'sde_cls': sdes.IntegratedFitzhughNagumo,
