@@ -1,0 +1,16 @@
+{
+    "T": 1000,
+    "Ts": [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850,900, 950, 1000],
+    "algorithms": {"naive": {"N": [1000], "fk_model": ["BootstrapDA"]}, 
+                   "ON2": {"N": [], "fk_model": []}, 
+                   "MCMC_1": {"N": [1000], "fk_model": ["BsR_DH", "BsR_NDBr", "BsR_DBr", "BsR_OU"]}
+                },
+    "M": 20,
+    "cdssm_smc_kwargs": {"num": 50, "resampling": "systematic", "ESSrmin": 1.0},
+    "cdssm": {"OU_0.2": 55765},
+    "add_funcs": ["FirstMom"],
+    "simulation_num": 1000,
+    "run_cdssm": true,
+    "run_lgssm": true,
+    "ssm_fk_models": ["Bootstrap"]
+}
