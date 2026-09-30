@@ -26,12 +26,19 @@
 /paper/linear_sde_filtering/results
 /paper/linear_sde_smoothing/results
 /paper/fhn_smoothing/results
+/paper/logistic_sde_o_smoothing/results
+
+# Plots from logistic sde o smoothing experiments
+/paper/logistic_sde_o_smoothing/plots/aux_bridge_config/files
+/paper/logistic_sde_o_smoothing/plots/logistic_config/files
+/paper/logistic_sde_o_smoothing/plots/logistic_int_config/files
 
 # Deprecated experiment files
 /paper/linear_sde_filtering/deprecated
 /paper/linear_sde_smoothing/deprecated
 /paper/fhn_smoothing/deprecated
 /paper/fhn_smoothing_bias/deprecated
+/paper/logistic_sde_o_smoothing/deprecated
 
 # # Files in development not included in the first release:
 
