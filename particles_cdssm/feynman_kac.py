@@ -120,13 +120,23 @@ class CDSSM_FeynmanKac(FeynmanKac):
         """
         raise NotImplementedError('Upper bound on logpt is not available for CDSSMs')
 
-    def add_func(self, t, xp, x):
-        """
-        Method needs to be defined on the underlying cdssm to use the collectors
-        'Online_smooth_naive'/'Online_smooth_ON2'/'PaRIS'. 
-        """
-        return self.cdssm.add_func(t, xp, x)
+    def _preprocess_add_func(self, t, xp, x):
+        # If t=0 and not observed at 0, create a struct arr that contains N copies of x0
+        if t == 0 and (not self.cdssm.isobservedat0):
+            N = x.shape[0]
+            xp = self.cdssm._init_dist_container(N)
+            xp['0.0'] = self.cdssm.x0
+        # If the x input is a single path, replicates it N times 
+        x = np.tile(x, reps=xp.shape[0]) if isinstance(x, np.void) else x
+        return xp, x
 
+    def add_func(self, t, xp, x):
+        # No changes needed if t=0 and observed at 0.
+        if t == 0 and self.cdssm.isobservedat0:
+            return self.cdssm.add_func(t, xp, x)
+        xp, x = self._preprocess_add_func(t, xp, x)
+        return self.cdssm.add_func(t, xp, x)
+                                        
     @property
     def is1d(self):
         return isinstance(self.cdssm, cdssms.CDSSM)
@@ -145,7 +155,7 @@ class CDSSM_FeynmanKac(FeynmanKac):
 
     def _preprocess_logpt(self, xp, x):
         x_start = xp[xp.dtype.names[-1]]; N = x_start.shape[0]
-        x = np.stack([x]*N) if type(x) is np.void else x
+        x = np.tile(x, reps=N) if isinstance(x, np.void) else x
         x_end = x[x.dtype.names[-1]]
         return x_start, x, x_end
 
@@ -306,6 +316,16 @@ class ReparameterisedDA(CDSSM_FeynmanKac):
             X[t] = aux_bridge.transform_W_to_X(W[t], x_start)
         return X
     
+    def _preprocess_add_func(self, t, xp, x):
+        # Preprocessing steps when not reparameterised
+        xp, x = super()._preprocess_add_func(t, xp, x)
+        # When path-valued particles are reparmeterised, recover the original path
+        x_start = xp[xp.dtype.names[-1]]
+        x_end = x[x.dtype.names[-1]]
+        aux_bridge = self._build_aux_bridge(t, x_start, x_end)
+        x = aux_bridge.transform_W_to_X(x, x_start)
+        return xp, x
+
 class BootstrapDA(CDSSM_FeynmanKac):
     """
     Basically the same as the standard Bootstrap PF. Only difference is that instead of 
