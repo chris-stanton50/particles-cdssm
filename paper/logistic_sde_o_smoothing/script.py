@@ -1,7 +1,7 @@
 import argparse
 import json
+from functools import partial
 from pathlib import Path
-from types import MethodType
 import inspect
 from time import perf_counter
 
@@ -102,7 +102,7 @@ def generate_results_cdssm(config_name: str, config: dict) -> pd.DataFrame:
 
         for add_func_name, add_func in add_func_dict.items():
             
-            cdssm.add_func = MethodType(add_func.cdssm, cdssm)
+            cdssm.add_func = partial(add_func.cdssm, cdssm)
             
             for algo_name, algo_settings in config['algorithms'].items():
 
@@ -118,7 +118,7 @@ def generate_results_cdssm(config_name: str, config: dict) -> pd.DataFrame:
                 print(f"N={algo_settings['N']}, fk_models: {list(fk_models_dict.keys())}")
                 
                 start = perf_counter()
-                output = multiCDSSM_SMC(nruns=config['M'], nprocs=1, out_func=out_func, collect=[collector], N=algo_settings['N'], fk=fk_models_dict, **config['cdssm_smc_kwargs'])
+                output = multiCDSSM_SMC(nruns=config['M'], nprocs=0, out_func=out_func, collect=[collector], N=algo_settings['N'], fk=fk_models_dict, **config['cdssm_smc_kwargs'])
                 run_time = perf_counter() - start
 
                 print(f"Run complete. CPU time: {run_time}.")
@@ -158,7 +158,7 @@ def generate_results_lgssm(config_name: str, config: dict) -> pd.DataFrame:
         
         for add_func_name, add_func in add_func_dict.items():
                             
-            lgssm.add_func = MethodType(add_func.ssm, lgssm)
+            lgssm.add_func = partial(add_func.ssm, lgssm)
             
             for algo_name, algo_settings in config['algorithms'].items():
 
