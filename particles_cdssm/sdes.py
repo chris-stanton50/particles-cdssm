@@ -387,6 +387,71 @@ class LogisticDiffusion(SDE):
     def dsigma(self, t, x):
         return self.s
 
+class LogisticGrowthDiffusion(SDE):
+    """
+    Logistic growth diffusion from Section 5.2 of Chopin et al (2023):
+
+        dP_t = ((theta_3^2 / 2) + theta_1 - theta_2 P_t) P_t dt
+               + theta_3 P_t dW_t
+
+    The state P_t represents a positive population size.
+    """
+    default_params = {
+        'theta_1': 0.5,
+        'theta_2': 0.1,
+        'theta_3': 0.1,
+    }
+
+    def b(self, t, x):
+        return ((self.theta_3 ** 2) / 2
+                + self.theta_1
+                - self.theta_2 * x) * x
+
+    def sigma(self, t, x):
+        return self.theta_3 * x
+
+    def db(self, t, x):
+        return (self.theta_3 ** 2) / 2 + self.theta_1 - 2 * self.theta_2 * x
+
+    def dsigma(self, t, x):
+        return self.theta_3
+
+
+class LampertiLogisticGrowthDiffusion(SDE):
+    """
+    Lamperti-transformed logistic growth diffusion.
+
+    With
+
+        X_t = log(P_t) / theta_3,
+
+    the transformed SDE is:
+
+        dX_t = [theta_1 / theta_3
+                - (theta_2 / theta_3) exp(theta_3 X_t)] dt
+               + dW_t.
+    """
+    default_params = {
+        'theta_1': 0.5,
+        'theta_2': 0.1,
+        'theta_3': 0.1,
+    }
+
+    def b(self, t, x):
+        return (
+            self.theta_1 / self.theta_3
+            - (self.theta_2 / self.theta_3) * np.exp(self.theta_3 * x)
+        )
+
+    def sigma(self, t, x):
+        return 1.0
+
+    def db(self, t, x):
+        return -self.theta_2 * np.exp(self.theta_3 * x)
+
+    def dsigma(self, t, x):
+        return 0.0
+    
 #---------------------------------- Abstract base classes for Linear, Univariate SDEs ----------------------------------
 
 class LinearSDE(SDE):
@@ -1367,6 +1432,60 @@ class LotkaVolterra(MvEllipticSDE):
     def sigma(self, t, x):
         diag_sigma = x*self.s # (N, 2)        
         return np.einsum('ni,ij->nij', diag_sigma, np.eye(2))
+
+
+class LotkaVolterra_Ryder(MvEllipticSDE):
+    """Lotka--Volterra SDE from Ryder et al. (2018), Section 5.1.
+
+    With ``x = (U, V)`` (prey and predator populations), the drift is
+
+    ``(theta_1 U - theta_2 U V, theta_2 U V - theta_3 V)``.
+
+    Equation (24) in Ryder et al. specifies the *diffusion covariance*
+    rather than a particular diffusion factor.  ``sigma`` returns its lower
+    Cholesky factor, so that ``Cov(t, x) == sigma(t, x) @ sigma(t, x).T``.
+    The construction assumes positive population states and rate parameters,
+    as in the model definition.
+    """
+    dimX = 2
+    default_params = {'theta': np.array([0.5, 0.0025, 0.3])}
+
+    def b(self, t, x):
+        """Return the drift, with shape ``(N, 2)``."""
+        u, v = x[:, 0], x[:, 1]
+        theta_1, theta_2, theta_3 = self.theta
+        return np.stack([
+            theta_1 * u - theta_2 * u * v,
+            theta_2 * u * v - theta_3 * v,
+        ], axis=1)
+
+    def sigma(self, t, x):
+        """Return a lower-Cholesky factor of Eq. (24), shape ``(N, 2, 2)``."""
+        u, v = x[:, 0], x[:, 1]
+        theta_1, theta_2, theta_3 = self.theta
+        uv_rate = theta_2 * u * v
+        beta_11 = theta_1 * u + uv_rate
+        beta_22 = theta_3 * v + uv_rate
+        l_11 = np.sqrt(beta_11)
+        l_21 = -uv_rate / l_11
+        l_22 = np.sqrt(beta_22 - np.square(l_21))
+
+        sigma = np.zeros((x.shape[0], self.dimX, self.dimX))
+        sigma[:, 0, 0] = l_11
+        sigma[:, 1, 0] = l_21
+        sigma[:, 1, 1] = l_22
+        return sigma
+
+    def db(self, t, x):
+        """Return the drift Jacobian, with shape ``(N, 2, 2)``."""
+        u, v = x[:, 0], x[:, 1]
+        theta_1, theta_2, theta_3 = self.theta
+        db = np.empty((x.shape[0], self.dimX, self.dimX))
+        db[:, 0, 0] = theta_1 - theta_2 * v
+        db[:, 0, 1] = -theta_2 * u
+        db[:, 1, 0] = theta_2 * v
+        db[:, 1, 1] = theta_2 * u - theta_3
+        return db
 
 #--------------------------------------------- Examples of Multivariate Integrated SDE -------------------------------------------
 
