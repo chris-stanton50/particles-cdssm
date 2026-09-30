@@ -80,6 +80,7 @@ import numpy.linalg as nla
 from particles.state_space_models import StateSpaceModel
 from particles.kalman import MeanAndCov, filter_step, MVLinearGauss, LinearGauss
 import particles.distributions as dists
+import particles_cdssm.distributions as cd_dists
 
 from particles_cdssm.sdes import OrnsteinUhlenbeck, MvOrnsteinUhlenbeck
 from particles_cdssm.numerical_schemes import EulerMaruyama, MvEulerMaruyama
@@ -101,7 +102,7 @@ class CDSSMBase:
             self.s_ts = s_ts
         else:
             assert all([t >= 0. for t in s_ts]), 'All elements of s_ts must be positive'
-            assert s_ts[0] == 0, 'First element of s_ts must be 0'
+            assert s_ts[0] == 0., 'First element of s_ts must be 0'
             self.s_ts = np.array(s_ts) # Covert to array if input is a list
         
     @property
@@ -197,7 +198,44 @@ class CDSSMBase:
             x.append(self._PX_sim(t, x[-1], num=num))
         y = self.simulate_given_x(x)
         return x, y
-    
+                                  
+    def add_func(self, t, xp, x):
+        """
+        Subclass this function to implement online smoothing algorithms for CD-SSMs,
+        using the (vectorised) implementation of an additive functional as defined here.
+        
+        Note: when t=0 and the additive functional is observed at 0, xp=None and x
+             is the points of the simulated particles from the initial law. 
+        If the intended additive functional is a pathspace functional (e.g an integral 
+        of a function of the diffusion, then the additive functional at t=0 will itself be
+        0. This needs to be explicitly defined in the code, using e.g the below before 
+        writing code for the pathspace functional)
+        
+        ```
+        if t == 0 and self.isobservedat0:
+            return np.zeros(x.shape[0])
+        ```
+                
+        Parameters
+        ----------
+        t (int): The time step
+        xp (structured np.ndarray): N path-valued particles at time t-1 
+        x (structured np.ndarray): N path-valued particles at time t
+        
+        Both xp and x stored in structured arrays:
+        
+        Returns
+        ----------
+        add_func (np.ndarray), shape (N, )
+            
+        Evaluations of the additive functional for each of the N pairs of particles at times t-1 and t resp.
+        """
+        # # When t == 0 and working with 
+        # if t == 0 and self.isobservedat0:
+        #     return np.zeros(x.shape[0])
+        msg = 'To use collectors for online smoothing algorithms, method add_func must be defined.'
+        raise NotImplementedError(msg)                
+        
 class CDSSM(CDSSMBase):
     """
     Subclass this CDSSM when we have a univariate SDE with a univariate observation density.
@@ -260,6 +298,53 @@ class CDSSM(CDSSMBase):
         Proposal: (Multi-dimensional) distribution object
         """
         return self._error_msg(self, "proposal0")
+
+class NegativeBinomialCDSSM(CDSSM):
+    """
+    Negative Binomial observation CD-SSM.
+
+    Observation density has the following parameters:
+    
+    - Mean: Current state of the diffusion
+    - Dispersion: theta_4
+    
+    The variance of the distribution can be controlled with theta_4. 
+    Increasing theta_4 will reduce the variance.
+    
+    As theta_4 goes to infinity, the variance converges to the mean of the process. 
+    """
+    default_params = {
+        'theta_4': 17.631,
+    }
+    
+    default_x0 = 600.
+
+    def PY(self, t, xp, x):
+        x_end = x[x.dtype.names[-1]] if x.dtype.names is not None else x
+        mean = x_end
+        p = self.theta_4 / (self.theta_4 + mean)
+        return cd_dists.NegativeBinomial(n=self.theta_4, p=p)
+
+
+class LampertiLogisticNegativeBinomialCDSSM(NegativeBinomialCDSSM):
+    """Negative Binomial observation CD-SSM.
+    
+    Specifically for use with the `LampertiLogisticGrowthDiffusion' cdssm. 
+    Applies the inverse Lamperti transform to the current state of the process 
+    using a parameter (theta_3) from the model sde.
+    
+    - The mean parameter is the inverse of the Lamperti transform applied to the current state of the process.
+    - The dispersion parameter is an input as theta_4.
+        
+    """
+
+    default_x0 = float(np.log(600.) / 0.7)
+
+    def PY(self, t, xp, x):
+        x_end = x[x.dtype.names[-1]] if x.dtype.names is not None else x
+        mean = np.exp(self.model_sde.theta_3 * x_end)
+        p = self.theta_4 / (self.theta_4 + mean)
+        return cd_dists.NegativeBinomial(n=self.theta_4, p=p)
 
 class NormalCDSSM(CDSSM):
 
@@ -482,4 +567,3 @@ class MvNormalCDSSM(MvCDSSM):
             'covY': self.covY # (dimY, dimY)
             }
         return MVLinearGauss(**mvlg_params)
-
