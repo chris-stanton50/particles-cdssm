@@ -6,6 +6,9 @@ of some results.
 
 import numpy as np
 import numpy.linalg as nla
+
+import platform
+import os
 import inspect
 import time
 import collections
@@ -559,3 +562,42 @@ def build_cdssm(cdssm_spec):
     # We define the CDSSM:
     cdssm = cdssm_cls(sde, **cdssm_params)
     return cdssm
+
+def isremote():
+    """Utility function for checking if using a specific VM (UCL Merida)
+        by checking its specs. Not for general purpose user."""
+    
+    # Must be Linux
+    if platform.system() != "Linux":
+        return False
+
+    # Check CPU model
+    try:
+        with open("/proc/cpuinfo") as f:
+            cpuinfo = f.read()
+        if "Intel(R) Core(TM) i7-14700KF" not in cpuinfo:
+            return False
+    except OSError:
+        return False
+
+    # VM has 28 logical CPUs
+    if os.cpu_count() != 28:
+        return False
+
+    # VM has ~64 GB RAM (62 GiB visible)
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = f.read()
+
+        mem_kb = int(
+            next(line for line in meminfo.splitlines()
+                 if line.startswith("MemTotal:")).split()[1]
+        )
+        mem_gib = mem_kb / 1024**2
+
+        if not 60 < mem_gib < 65:
+            return False
+    except (OSError, ValueError, StopIteration):
+        return False
+
+    return True
