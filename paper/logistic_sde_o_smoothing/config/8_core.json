@@ -15,7 +15,7 @@
       "fk_model": ["BsR_DH"]
     }
   },
-  "M": 20,
+  "M": 24,
   "nprocs": 0,
   "cdssm_smc_kwargs": {
     "num": 50,
