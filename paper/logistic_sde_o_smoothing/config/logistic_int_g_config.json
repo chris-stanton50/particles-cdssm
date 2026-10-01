@@ -4,15 +4,15 @@
   "algorithms": {
     "naive": {
       "N": [41800],
-      "fk_model": ["BootstrapDA"]
+      "fk_model": ["FwG_OUP"]
     },
     "ON2": {
       "N": [100],
-      "fk_model": ["BsR_DH"]
+      "fk_model": ["FwR_OU_OUP"]
     },
     "MCMC_1": {
       "N": [7850],
-      "fk_model": ["BsR_DH"]
+      "fk_model": ["FwR_OU_OUP"]
     }
   },
   "M": 24,
