@@ -28,6 +28,9 @@
 /paper/fhn_smoothing/results
 /paper/logistic_sde_o_smoothing/results
 
+# Ad hoc analysis
+/paper/logistic_sde_o_smoothing/stuff
+
 # Deprecated experiment files
 /paper/linear_sde_filtering/deprecated
 /paper/linear_sde_smoothing/deprecated
