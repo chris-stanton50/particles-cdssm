@@ -117,8 +117,9 @@ def generate_results_cdssm(config_name: str, config: dict) -> pd.DataFrame:
                 print(f"Running multiCDSSM_SMC for config: {config_name}, cdssm: {cdssm_name}, add_func: {add_func_name}, algo: {algo_name}")
                 print(f"N={algo_settings['N']}, fk_models: {list(fk_models_dict.keys())}")
                 
+                nprocs = int(config['nprocs']) if 'nprocs' in config else 0 
                 start = perf_counter()
-                output = multiCDSSM_SMC(nruns=config['M'], nprocs=0, out_func=out_func, collect=[collector], N=algo_settings['N'], fk=fk_models_dict, **config['cdssm_smc_kwargs'])
+                output = multiCDSSM_SMC(nruns=config['M'], nprocs=nprocs, out_func=out_func, collect=[collector], N=algo_settings['N'], fk=fk_models_dict, **config['cdssm_smc_kwargs'])
                 run_time = perf_counter() - start
 
                 print(f"Run complete. CPU time: {run_time}.")
@@ -130,6 +131,8 @@ def generate_results_cdssm(config_name: str, config: dict) -> pd.DataFrame:
                 df['cdssm_seed'] = seed
                 df['add_func'] = add_func_name
                 df['algorithm'] = algo_name
+                df['nprocs'] = nprocs
+                df['remote'] = isremote()
                 
                 print(f"Conversion complete.")
                 output_dfs.append(df)
@@ -174,8 +177,10 @@ def generate_results_lgssm(config_name: str, config: dict) -> pd.DataFrame:
                 print(f"N={algo_settings['N']}, fk_models: {list(ssm_fk_models_dict.keys())}")
                 
                 ssm_smc_kwargs = {k: v for k, v in config['cdssm_smc_kwargs'].items() if k != 'num'}
+                nprocs = int(config['nprocs']) if 'nprocs' in config else 0 
+
                 start = perf_counter()
-                output = particles.multiSMC(nruns=config['M'], nprocs=1, out_func=out_func, collect=[collector], N=algo_settings['N'], fk=ssm_fk_models_dict, **ssm_smc_kwargs)
+                output = particles.multiSMC(nruns=config['M'], nprocs=nprocs, out_func=out_func, collect=[collector], N=algo_settings['N'], fk=ssm_fk_models_dict, **ssm_smc_kwargs)
                 run_time = perf_counter() - start
 
                 print(f"Run complete. CPU time: {run_time}.")
@@ -186,6 +191,8 @@ def generate_results_lgssm(config_name: str, config: dict) -> pd.DataFrame:
                 df['cdssm_seed'] = seed
                 df['add_func'] = add_func_name
                 df['algorithm'] = algo_name
+                df['nprocs'] = nprocs
+                df['remote'] = isremote()
                 
                 print(f"Conversion complete.")
                 output_dfs.append(df)
