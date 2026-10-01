@@ -13,7 +13,7 @@ from particles.utils import multiplexer
 from particles_cdssm.cdssm_lib import CDSSM_LIB
 from utils import obs_times_to_store
 
-from particles_cdssm.tools import build_cdssm
+from particles_cdssm.tools import build_cdssm, isremote
 from particles_cdssm.mcmc import mcmc_worker
 import particles_cdssm.feynman_kac as sfk
 import particles_cdssm.auxiliary_bridges as axb
@@ -58,16 +58,17 @@ idata_reparameterised = az.concat([r['output'] for r in out_reparameterised], di
 idatas = {'bootstrap_icsmc': idata_bootstrap, 'guided_icsmc': idata_guided, 'reparameterised_icsmc_bs': idata_reparameterised}
 
 print('Storing results..')
+local_or_remote = 'remote' if isremote() else 'local'
 for name, idata in idatas.items():
     # idata.posterior = idata.posterior.sel({'time': obs_times_to_store(T)}) # Only store a subset of times 
-    idata.to_netcdf(f'./results/run_{run_id}_{name}.nc')
+    idata.to_netcdf(f'./results/{local_or_remote}/run_{run_id}_{name}.nc')
     
 metadata = {'x': x,
             'y': y, 
             'cdssm': cdssm,
             }
 
-with open(f'./results/run_{run_id}_meta.pkl', 'wb') as f:
+with open(f'./results/{local_or_remote}/run_{run_id}_meta.pkl', 'wb') as f:
     dill.dump(metadata, f)
 
 print('Data stored successfully:  - run complete.')
