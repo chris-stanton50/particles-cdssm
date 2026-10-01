@@ -28,7 +28,7 @@ run_id = int(sys.argv[1])
 T = 10 # May need adjusting
 
 # MCMC Params
-niter=1000; Nx=50; num=50
+niter=20; Nx=50; num=50
 
 cdssm_spec = CDSSM_LIB['IFHN']
 cdssm = build_cdssm(cdssm_spec)
