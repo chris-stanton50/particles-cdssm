@@ -141,7 +141,7 @@ def generate_results_cdssm(config_name: str, config: dict) -> pd.DataFrame:
 
     results_df = pd.concat(output_dfs, axis=0, ignore_index=True)
     
-    df_columns = ['cdssm', 'cdssm_seed', 'add_func', 'algorithm', 'fk', 'run', 'N', 'seed', 'cpu'] + [str(T) for T in config['Ts']]
+    df_columns = ['cdssm', 'cdssm_seed', 'add_func', 'algorithm', 'nprocs', 'remote', 'fk', 'run', 'N', 'seed', 'cpu'] + [str(T) for T in config['Ts']]
     results_df = results_df[df_columns]
     return results_df
 
