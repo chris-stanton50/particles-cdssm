@@ -15,10 +15,10 @@
       "fk_model": ["BsR_DH"]
     }
   },
-  "M": 20,
+  "M": 8,
   "nprocs": 2,
   "cdssm_smc_kwargs": {
-    "num": 50,
+    "num": 10,
     "resampling": "systematic",
     "ESSrmin": 1.0
   },
