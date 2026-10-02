@@ -150,7 +150,7 @@ class CDSSMBase:
         """
         Conditional distribution of Y_t, given the states at the end point E_t.
         """
-        return self._error_msg("PY")
+        raise NotImplementedError(self._error_msg("PY"))
     
     def S(self, t):
         """
@@ -274,7 +274,7 @@ class CDSSM(CDSSMBase):
         ------------
         LY: float
         """
-        return self._error_msg(self, "LY")
+        raise NotImplementedError(self._error_msg("LY"))
     
     def SigmaY(self, t):
         """
@@ -286,8 +286,25 @@ class CDSSM(CDSSMBase):
         ------------
         CovY: float        
         """
-        return self._error_msg(self, "SigmaY")
+        raise NotImplementedError(self._error_msg("SigmaY"))
 
+    def proposal_data_transform(self, data: np.ndarray):
+        """
+        Function to transform a single data points before input into forward proposal 
+        or end point proposal contructors. To be used together with 'LY' and 'SigmaY' 
+        when defining default behaviour for contructing path-proposals associated with 
+        the cdssm.
+        
+        Inputs
+        ------------
+        data: np.ndarray (1,)
+
+        Returns
+        ------------
+        transformed_data: np.ndarray (1,)       
+        """
+        raise NotImplementedError(self._error_msg("proposal_data_transform"))
+    
     def proposal0(self):
         """
         Used as the proposal in guided filters when the initial state x0 is unknown
@@ -297,7 +314,7 @@ class CDSSM(CDSSMBase):
         ------------
         Proposal: (Multi-dimensional) distribution object
         """
-        return self._error_msg(self, "proposal0")
+        raise NotImplementedError(self._error_msg(self, "proposal0"))
 
 class NegativeBinomialCDSSM(CDSSM):
     """
@@ -329,7 +346,7 @@ class NegativeBinomialCDSSM(CDSSM):
 class LampertiLogisticNegativeBinomialCDSSM(NegativeBinomialCDSSM):
     """Negative Binomial observation CD-SSM.
     
-    Specifically for use with the `LampertiLogisticGrowthDiffusion' cdssm. 
+    Specifically for use with the `LampertiLogisticGrowthDiffusion' model_sde. 
     Applies the inverse Lamperti transform to the current state of the process 
     using a parameter (theta_3) from the model sde.
     
@@ -346,6 +363,15 @@ class LampertiLogisticNegativeBinomialCDSSM(NegativeBinomialCDSSM):
         p = self.theta_4 / (self.theta_4 + mean)
         return cd_dists.NegativeBinomial(n=self.theta_4, p=p)
 
+    def LY(self, t):
+        return 1.
+
+    def SigmaY(self, t):
+        return 0.1625
+
+    def proposal_data_transform(self, data):
+        return np.log(data)/self.model_sde.theta_3
+
 class NormalCDSSM(CDSSM):
 
     default_params = {'sigmaY': 1.}
@@ -359,6 +385,9 @@ class NormalCDSSM(CDSSM):
 
     def SigmaY(self, t):
         return self.sigmaY
+
+    def proposal_data_transform(self, data):
+        return data
 
     def proposal0(self, data):
         """
@@ -441,7 +470,7 @@ class MvCDSSM(CDSSMBase):
         ------------
         LY: (dimY, dimX) array       
         """
-        return self._error_msg(self, "LY")
+        raise NotImplementedError(self._error_msg(self, "LY"))
 
     def SigmaY(self, t):
         """
@@ -453,7 +482,25 @@ class MvCDSSM(CDSSMBase):
         ------------
         CovY: (dimY, dimY) array        
         """
-        return self._error_msg(self, "SigmaY")
+        raise NotImplementedError(self._error_msg(self, "SigmaY"))
+
+    def proposal_data_transform(self, data: np.ndarray):
+        """
+        Function to transform a single data points before input into forward proposal 
+        or end point proposal contructors. To be used together with 'LY' and 'SigmaY' 
+        when defining default behaviour for contructing path-proposals associated with 
+        the cdssm.
+        
+        Inputs
+        ------------
+        data: np.ndarray (1, dimY)
+
+        Returns
+        ------------
+        transformed_data: np.ndarray (1, dimY)       
+        """
+        raise NotImplementedError(self._error_msg("proposal_data_transform"))
+
 
     def proposal0(self):
         """
@@ -464,7 +511,7 @@ class MvCDSSM(CDSSMBase):
         ------------
         Proposal: (Multi-dimensional) distribution object
         """
-        return self._error_msg(self, "proposal0")
+        raise NotImplementedError(self._error_msg(self, "proposal0"))
             
 class MvNormalCDSSM(MvCDSSM):
     """
@@ -494,13 +541,16 @@ class MvNormalCDSSM(MvCDSSM):
     def PY(self, t, xp, x):
         x_end = x[x.dtype.names[-1]] if x.dtype.names is not None else x
         return dists.MvNormal(loc=x_end @ self.G.T, cov=self.covY)
-    
+        
     def LY(self, t):
         return self.G
         
     def SigmaY(self, t):
         return self.sigmaY
     
+    def proposal_data_transform(self, data):
+        return data
+
     # def gen_score_add_func(self, param_name):
     #     gplpx = self.model_sde.grad_param_log_px
     #     @use_end_point

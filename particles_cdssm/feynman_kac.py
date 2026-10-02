@@ -177,10 +177,11 @@ class ForwardProposalMixin:
         return axb.DriftBrownianProp if self.is1d else axb.MvDriftBrownianProp
 
     def _build_forward_proposal(self, t, x_start):
+        y = self.cdssm.proposal_data_transform(self.data[t])
         if self.cdssm.isobservedat0:
-            return self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t-1), self.cdssm.S(t), self.data[t], self.cdssm.LY(t), self.cdssm.SigmaY(t))
+            return self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t-1), self.cdssm.S(t), y, self.cdssm.LY(t), self.cdssm.SigmaY(t))
         else:
-            return self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.SigmaY(t))
+            return self.proposal_sde_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), y, self.cdssm.LY(t), self.cdssm.SigmaY(t))
         
 class AuxiliaryBridgeMixin:
 
@@ -247,10 +248,11 @@ class EndPointProposalMixin:
             return axb.EulerMaruyamaEndPointProposal
 
     def _build_end_point_proposal(self, t, x_start):
+        y = self.cdssm.proposal_data_transform(self.data[t])
         if self.cdssm.isobservedat0:
-            return self.end_pt_proposal_cls(self.model_sde, x_start, self.cdssm.S(t-1), self.cdssm.S(t), self.data[t], self.cdssm.LY(t), self.cdssm.SigmaY(t))
+            return self.end_pt_proposal_cls(self.model_sde, x_start, self.cdssm.S(t-1), self.cdssm.S(t), y, self.cdssm.LY(t), self.cdssm.SigmaY(t))
         else:
-            return self.end_pt_proposal_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), self.data[t], self.cdssm.LY(t), self.cdssm.SigmaY(t))
+            return self.end_pt_proposal_cls(self.model_sde, x_start, self.cdssm.S(t), self.cdssm.S(t+1), y, self.cdssm.LY(t), self.cdssm.SigmaY(t))
  
 class GuidedDA(CDSSM_FeynmanKac):
     """
