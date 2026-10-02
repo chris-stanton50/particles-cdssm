@@ -11,7 +11,7 @@
       "fk_model": ["BsR_DH"]
     },
     "MCMC_1": {
-      "N": [9750],
+      "N": [9000],
       "fk_model": ["BsR_DH"]
     }
   },
