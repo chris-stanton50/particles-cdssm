@@ -25,10 +25,10 @@ if not len(sys.argv) >= 2:
 run_id = int(sys.argv[1])
 
 # Data params
-T = 10 # May need adjusting
+T = 100 # May need adjusting
 
 # MCMC Params
-niter=20; Nx=50; num=50
+niter=1000; Nx=50; num=50
 
 cdssm_spec = CDSSM_LIB['IFHN']
 cdssm = build_cdssm(cdssm_spec)
