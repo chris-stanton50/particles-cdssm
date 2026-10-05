@@ -43,13 +43,13 @@ fks = {'bootstrap': sfk.BootstrapDA(cdssm=cdssm, data=y),
        'backward_reparameterised': sfk.BackwardReparameterisedDA(cdssm=cdssm, data=y, auxiliary_bridge_cls=axb.IntegratedNoDriftBrownianAuxBridge, end_pt_proposal_cls=axb.IntegratedNoDriftEndPointProposal)}
 
 print(f'Running MCMC bootstrap in parallel...')
-out_boot = multiplexer(f=mcmc_worker, nruns=32, nprocs=0, seeding=True, fk=fks['bootstrap'], method=['icsmc'], niter=niter, Nx=Nx, num=num)
+out_boot = multiplexer(f=mcmc_worker, nruns=96, nprocs=0, seeding=True, fk=fks['bootstrap'], method=['icsmc'], niter=niter, Nx=Nx, num=num)
 
 print(f'Running MCMC backward guided in parallel...')
-out_guided = multiplexer(f=mcmc_worker, nruns=32, nprocs=0, seeding=True, fk=fks['backward_guided'], method=['icsmc'], niter=niter, Nx=Nx, num=num)
+out_guided = multiplexer(f=mcmc_worker, nruns=96, nprocs=0, seeding=True, fk=fks['backward_guided'], method=['icsmc'], niter=niter, Nx=Nx, num=num)
 
 print(f'Running MCMC backward reparameterised in parallel...')
-out_reparameterised = multiplexer(f=mcmc_worker, nruns=32, nprocs=0, seeding=True, fk=fks['backward_reparameterised'], method=['icsmc_bs'], niter=niter, Nx=Nx, num=num)
+out_reparameterised = multiplexer(f=mcmc_worker, nruns=96, nprocs=0, seeding=True, fk=fks['backward_reparameterised'], method=['icsmc_bs'], niter=niter, Nx=Nx, num=num)
 
 idata_bootstrap = az.concat([r['output'] for r in out_boot], dim='chain')
 idata_guided = az.concat([r['output'] for r in out_guided], dim='chain')
