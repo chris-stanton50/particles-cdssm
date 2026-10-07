@@ -1,11 +1,20 @@
-python filtering_experiment.py 5 mv_ou
-python filtering_experiment.py 10 mv_ou 
-python filtering_experiment.py 20 mv_ou 
-python filtering_experiment.py 50 mv_ou
-python filtering_experiment.py 100 mv_ou
+#!/usr/bin/env bash
 
-python filtering_experiment.py 5 iou
-python filtering_experiment.py 10 iou
-python filtering_experiment.py 20 iou
-python filtering_experiment.py 50 iou 
-python filtering_experiment.py 100 iou
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$script_dir"
+
+shopt -s nullglob
+config_files=(config/*.json)
+
+if (( ${#config_files[@]} == 0 )); then
+    echo "No JSON config files found in $script_dir/config" >&2
+    exit 1
+fi
+
+for config_file in "${config_files[@]}"; do
+    config_name="${config_file##*/}"
+    config_name="${config_name%.json}"
+    python filtering_experiment.py "$config_name"
+done

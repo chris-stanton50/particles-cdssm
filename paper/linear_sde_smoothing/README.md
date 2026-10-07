@@ -2,11 +2,33 @@
 
 Re-run the Linear SDEs smoothing experiment for the paper "Particle-based inference for continuous-discrete state space models" here.
 
-The details of the experiment are outlined in Secion 6.1.2 of the paper. To run the experiment, run the script:
+The details of the experiment are outlined in Section 6.1.2 of the paper.
 
-`source run_smoothing_experiments.sh`
+## Running the experiment
 
-This will take a few hours. The results will then be stored at `./results`.
-The results plot can then be reproduced in the notebook `smoothing_experiment_results.ipynb`. 
+Experiment parameters are stored in individual JSON files in [`config/`](./config). Each config specifies the simulation settings, CD-SSM, random seed, particle counts, quantiles, and FK models to run.
 
-From running this notebook, the plot of the will be saved and stored in `./figures/fig_3_smoothing_results.pdf`
+To run every configured experiment, execute the runner from this directory:
+
+```bash
+bash run_smoothing_experiments.sh
+```
+
+The runner discovers every `*.json` file in `config/` and invokes `smoothing_experiment.py` once for each config. The full experiment takes a few hours.
+
+To run one config manually, pass its filename without the `.json` extension:
+
+```bash
+python smoothing_experiment.py o_MV_OU_0.05
+```
+
+Results are stored in `./results` using the config name:
+
+```text
+res_<config_name>_part_1.json
+res_<config_name>_part_2.json
+res_<config_name>_part_3.json
+res_<config_name>_meta.pkl
+```
+
+The results plot can be reproduced in `smoothing_experiment_results.ipynb` and is saved to `./figures/fig_3_smoothing_results.pdf`.

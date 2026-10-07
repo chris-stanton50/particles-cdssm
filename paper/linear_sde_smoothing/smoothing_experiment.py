@@ -4,9 +4,9 @@ Smoothing experiment for linear SDEs used in the paper:
 
 Can be run with the command:
 
-python smoothing_experiment.py 10 mv_ou 
+python smoothing_experiment.py config_name
 
-(runs experiment on CD-SSM mv_ou with noise level 0.1)
+where config_name is the name of a JSON config file in ./config.
 
 Saves the results in the ./results directory.
  
@@ -30,6 +30,7 @@ import sys
 import numpy as np
 import pandas as pd
 import os
+import json
 
 from particles.utils import multiplexer
 from particles.kalman import Kalman
@@ -43,19 +44,8 @@ from particles_cdssm.core import SMC, CDSSM_SMC
 import particles_cdssm.feynman_kac as sfk
 from particles_cdssm.core import CDSSM_SMC, smoothing_worker
 
-from cdssm_lib import CDSSM_LIB
+from particles_cdssm.cdssm_lib import CDSSM_LIB
 from utils import obs_times_to_store, kalman_results_to_df, multismooth_results_to_df, benchmark_pf_results_to_df
-T = 100
-quantiles = np.linspace(0.05, 0.95, num=19)
-
-N_FFBS_MCMC=100
-N_genealogy=100; num=50; nruns=960
-benchmark_N = 100000
-
-debug = False
-pf_benchmark = False
-part_3 = True
-
 """
 `mv_ou'
 Ts = [10, 31, 100, 316, 1000]
@@ -77,29 +67,38 @@ Part 4 run time: 28.12 seconds
 Total CPU time: 500.25 seconds
 """
 
-if not len(sys.argv) >= 3:
-    raise ValueError('Please provide a run_id and cdssm_string as an argument when running the script.')
+if not len(sys.argv) >= 2:
+    raise ValueError('Please provide a config name when running the script.')
 
-run_id = int(sys.argv[1])
-cdssm_str = str(sys.argv[2])
+config_name = str(sys.argv[1])
+print(f"Running smoothing experiment for config {config_name}.json")
 
-noise_level = (run_id % 100)/100 # 110 becomes 0.1
-if noise_level == 0.:
-    CDSSM_LIB[cdssm_str]['cdssm_params']['covY'] = CDSSM_LIB[cdssm_str]['high_noise_param']
-else:
-    CDSSM_LIB[cdssm_str]['cdssm_params']['covY'] = (noise_level ** 2) * CDSSM_LIB[cdssm_str]['high_noise_param']
+with open(f'./config/{config_name}.json', "r") as file:
+    config = json.load(file)
+
+T = config['T']
+quantiles = np.array(config['quantiles'])
+N_FFBS_MCMC = config['N_FFBS_MCMC']
+N_genealogy = config['N_genealogy']
+num = config['num']
+nruns = config['nruns']
+benchmark_N = config['benchmark_N']
+debug = config['debug']
+pf_benchmark = config['pf_benchmark']
+part_3 = config['part_3']
+cdssm_str = config['cdssm']
+fk_names = config['fk_model_snames']
+
+cdssm_spec = CDSSM_LIB[cdssm_str]
 
 # Build the cdssm
-cdssm_spec = CDSSM_LIB[cdssm_str]
 cdssm = build_cdssm(cdssm_spec)
 
-np.random.seed(cdssm_spec['seed'])
+np.random.seed(config['seed'])
 x, y = cdssm.simulate(T)
 
 is1d = not isinstance(cdssm, MvCDSSM)
 
-# Pull fk_names from the cdssm_spec
-fk_names = cdssm_spec['fk_names']
 filt_fk_names = [name for name in fk_names if name[2] != 'R']
 smth_fk_names = [name for name in fk_names if name[2] == 'R']
 
@@ -206,12 +205,12 @@ metadata = {'N_FFBS_MCMC': N_FFBS_MCMC,
 # Store data from the 4 parts:
 os.makedirs('./results', exist_ok=True)
 
-results_df_1.to_json(f'./results/smoothing_exp_run_{run_id}_{cdssm_str}_part_1.json', index=False)
-results_df_2.to_json(f'./results/smoothing_exp_run_{run_id}_{cdssm_str}_part_2.json', index=False)
+results_df_1.to_json(f'./results/res_{config_name}_part_1.json', index=False)
+results_df_2.to_json(f'./results/res_{config_name}_part_2.json', index=False)
 if part_3:
-    results_df_3.to_json(f'./results/smoothing_exp_run_{run_id}_{cdssm_str}_part_3.json', index=False)
+    results_df_3.to_json(f'./results/res_{config_name}_part_3.json', index=False)
 
-with open(f'./results/smoothing_exp_run_{run_id}_{cdssm_str}_meta.pkl', 'wb') as f:
+with open(f'./results/res_{config_name}_meta.pkl', 'wb') as f:
     dill.dump(metadata, f)
     
 part_4_cpu = time.perf_counter() - part_4_cpu

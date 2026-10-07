@@ -2,12 +2,33 @@
 
 Re-run the Linear SDEs filtering experiment for the paper "Particle-based inference for continuous-discrete state space models" here.
 
-The details of the experiment are outlined in Secion 6.1.1 of the paper. To run the experiment, run the script:
+The details of the experiment are outlined in Section 6.1.1 of the paper.
 
-`source run_filtering_experiments.sh`
+## Running the experiment
 
-This will take around an hour. The results will then be stored at `./results`.
+Experiment parameters are stored in individual JSON files in [`config/`](./config). Each config specifies the simulation settings, CD-SSM, random seed, and FK models to run.
 
-The results plot can then be reproduced in the notebook `filtering_experiment_results.ipynb`. 
+To run every configured experiment, execute the runner from this directory:
 
-From running this notebook, the plot of the will be saved and stored in `./figures/fig_2_filtering_results.pdf`
+```bash
+bash run_filtering_experiments.sh
+```
+
+The runner discovers every `*.json` file in `config/` and invokes `filtering_experiment.py` once for each config. The full experiment takes around an hour.
+
+To run one config manually, pass its filename without the `.json` extension:
+
+```bash
+python filtering_experiment.py o_MV_OU_0.05
+```
+
+Results are stored in `./results` using the config name:
+
+```text
+res_<config_name>_part_1.json
+res_<config_name>_part_2.json
+res_<config_name>_part_3.json
+res_<config_name>_meta.pkl
+```
+
+The results plot can be reproduced in `filtering_experiment_results.ipynb` and is saved to `./figures/fig_2_filtering_results.pdf`.

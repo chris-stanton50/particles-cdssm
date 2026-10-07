@@ -4,11 +4,13 @@ Filtering experiment for linear SDEs for the paper:
 
 Can be run with the command:
 
-python filtering_experiment.py 10 mv_ou 
+python filtering_experiment.py config_name
 
-(runs experiment on CD-SSM mv_ou with noise level 0.1)
+Where config_name is the name of a config file that contains all the parameters for the run,
+stored in json files within the ./config folder. 
 
-Saves the results in the ./results directory.
+Saves the results in the ./results directory. Results are stored in 3 json files (from pandas dataframes)
+and metadata, which is stored as a pickle object.
 """
 
 import time
@@ -16,6 +18,7 @@ import dill
 import os
 import numpy as np
 import sys
+import json
 
 from particles import multiSMC
 from particles.collectors import Moments
@@ -29,24 +32,23 @@ from particles_cdssm.state_space_models import DiscreteDiscreteSSM
 from particles_cdssm.tools import build_cdssm
 import particles_cdssm.feynman_kac as sfk
 from utils import kalman_results_to_frame, multismc_results_to_df
-from cdssm_lib import CDSSM_LIB
+from particles_cdssm.cdssm_lib import CDSSM_LIB
 
-T=100; N=100
-nruns_smc = 96; nruns_cdssm_smc = 96
-num=50
-seed = True
+if not len(sys.argv) >= 2:
+    raise ValueError('Please provide a config name with running the script.')
 
-if not len(sys.argv) >= 3:
-    raise ValueError('Please provide a run_id and cdssm_string as an argument when running the script.')
+config_name = str(sys.argv[1])
 
-run_id = int(sys.argv[1])
-cdssm_str = str(sys.argv[2])
+print(f"Running filtering experiment for config {config_name}.json")
 
-noise_level = (run_id % 100)/100 # 110 becomes 0.1
-if noise_level == 0.:
-    CDSSM_LIB[cdssm_str]['cdssm_params']['covY'] = CDSSM_LIB[cdssm_str]['high_noise_param']
-else:
-    CDSSM_LIB[cdssm_str]['cdssm_params']['covY'] = (noise_level ** 2) * CDSSM_LIB[cdssm_str]['high_noise_param']
+with open(f'./config/{config_name}.json', "r") as file:
+    config = json.load(file)
+
+T=config['T']; N=config['N']
+nruns_smc = config['nruns_smc']; nruns_cdssm_smc = config['nruns_cdssm_smc']
+num=config['num']
+cdssm_str = config['cdssm']
+fk_model_snames = config["fk_model_snames"]
 
 # run_id =30
 # cdssm_str = 'iou'
@@ -59,8 +61,7 @@ is1d = not isinstance(cdssm, MvCDSSM)
 
 print(f'CD-SSM params: {cdssm.params}')
 
-if seed:
-    np.random.seed(cdssm_spec['seed'])
+np.random.seed(config['seed'])
 x, y = cdssm.simulate(T)
 
 # Build the corresponding lgssm/ddssm for each noise level
@@ -113,7 +114,7 @@ part_3_cpu = time.perf_counter()
 print('Part 3: Running multiCDSSM_SMC:')
 
 # Generate all possible fk models for the given cdssm
-fks = sfk.gen_fk_models(cdssm, y, smoothing=False, fk_names=cdssm_spec['fk_names'])
+fks = sfk.gen_fk_models(cdssm, y, smoothing=False, fk_names=fk_model_snames)
 
 # Run the multiCDSSM_SMC algorithm at the given noise level
 tic = time.perf_counter()
@@ -141,13 +142,13 @@ metadata = {'N': N,
             }
 
 # Store data from the 4 parts:
-os.makedirs('./results', exist_ok=True)
+os.makedirs('./results/revision', exist_ok=True)
 
-true_vals_df.to_json(f'./results/filtering_exp_run_{run_id}_{cdssm_str}_part_1.json', index=False)
-results_df_2.to_json(f'./results/filtering_exp_run_{run_id}_{cdssm_str}_part_2.json', index=False)
-results_df_3.to_json(f'./results/filtering_exp_run_{run_id}_{cdssm_str}_part_3.json', index=False)
+true_vals_df.to_json(f'./results/res_{config_name}_part_1.json', index=False)
+results_df_2.to_json(f'./results/res_{config_name}_part_2.json', index=False)
+results_df_3.to_json(f'./results/res_{config_name}_part_3.json', index=False)
 
-with open(f'./results/filtering_exp_run_{run_id}_{cdssm_str}_meta.pkl', 'wb') as f:
+with open(f'./results/res_{config_name}_meta.pkl', 'wb') as f:
     dill.dump(metadata, f)
     
 part_4_cpu = time.perf_counter() - part_4_cpu
