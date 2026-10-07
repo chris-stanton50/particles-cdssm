@@ -1,0 +1,8 @@
+{"T": 100,
+ "N": 100,
+ "nruns_smc": 96,
+ "nruns_cdssm_smc": 96,
+ "num": 50,
+ "seed": 34953,
+ "cdssm": "MV_OU_1.0",
+ "fk_model_snames": ["BootstrapDA", "FwG_NDBrP", "BwG_NDBr_OUP"]}

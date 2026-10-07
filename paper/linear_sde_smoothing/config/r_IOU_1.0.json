@@ -1,0 +1,39 @@
+{
+  "T": 100,
+  "N_FFBS_MCMC": 100,
+  "N_genealogy": 100,
+  "num": 50,
+  "nruns": 960,
+  "benchmark_N": 100000,
+  "quantiles": [
+    0.05,
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3,
+    0.35,
+    0.4,
+    0.45,
+    0.5,
+    0.55,
+    0.6,
+    0.65,
+    0.7,
+    0.75,
+    0.8,
+    0.85,
+    0.9,
+    0.95
+  ],
+  "debug": false,
+  "pf_benchmark": false,
+  "part_3": true,
+  "seed": 34953,
+  "cdssm": "IOU_1.0",
+  "fk_model_snames": [
+    "BootstrapDA",
+    "BwG_NDBr_DBrP",
+    "BwR_NDBr_DBrP"
+  ]
+}
