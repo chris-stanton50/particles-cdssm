@@ -26,11 +26,11 @@ To calculate the run time of hypoelliptic smoothing, take run time of mv smoothi
 """
 import dill
 import time
-import sys
+import argparse
 import numpy as np
 import pandas as pd
-import os
 import json
+from pathlib import Path
 
 from particles.utils import multiplexer
 from particles.kalman import Kalman
@@ -45,6 +45,7 @@ import particles_cdssm.feynman_kac as sfk
 from particles_cdssm.core import CDSSM_SMC, smoothing_worker
 
 from particles_cdssm.cdssm_lib import CDSSM_LIB
+from particles_cdssm.tools import isremote
 from utils import obs_times_to_store, kalman_results_to_df, multismooth_results_to_df, benchmark_pf_results_to_df
 """
 `mv_ou'
@@ -67,13 +68,24 @@ Part 4 run time: 28.12 seconds
 Total CPU time: 500.25 seconds
 """
 
-if not len(sys.argv) >= 2:
-    raise ValueError('Please provide a config name when running the script.')
+parser = argparse.ArgumentParser(description="Run a linear SDE smoothing experiment.")
+parser.add_argument(
+    "-c",
+    "--config",
+    required=True,
+    type=Path,
+    help="Name of the JSON configuration file, with or without the .json suffix.",
+)
+args = parser.parse_args()
 
-config_name = str(sys.argv[1])
+config_name = args.config.stem
+config_path = Path("config") / args.config
+if config_path.suffix != ".json":
+    config_path = config_path.with_suffix(".json")
+
 print(f"Running smoothing experiment for config {config_name}.json")
 
-with open(f'./config/{config_name}.json', "r") as file:
+with config_path.open("r") as file:
     config = json.load(file)
 
 T = config['T']
@@ -203,14 +215,17 @@ metadata = {'N_FFBS_MCMC': N_FFBS_MCMC,
 # Store data from the 4 parts:
 
 # Store data from the 4 parts:
-os.makedirs('./results', exist_ok=True)
+local_or_remote = "remote" if isremote() else "local"
+results_dir = Path("results") / local_or_remote
+results_dir.mkdir(parents=True, exist_ok=True)
+print(f"Storing results in {results_dir}")
 
-results_df_1.to_json(f'./results/res_{config_name}_part_1.json', index=False)
-results_df_2.to_json(f'./results/res_{config_name}_part_2.json', index=False)
+results_df_1.to_json(results_dir / f"res_{config_name}_part_1.json", index=False)
+results_df_2.to_json(results_dir / f"res_{config_name}_part_2.json", index=False)
 if part_3:
-    results_df_3.to_json(f'./results/res_{config_name}_part_3.json', index=False)
+    results_df_3.to_json(results_dir / f"res_{config_name}_part_3.json", index=False)
 
-with open(f'./results/res_{config_name}_meta.pkl', 'wb') as f:
+with (results_dir / f"res_{config_name}_meta.pkl").open("wb") as f:
     dill.dump(metadata, f)
     
 part_4_cpu = time.perf_counter() - part_4_cpu

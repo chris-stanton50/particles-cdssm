@@ -16,5 +16,5 @@ fi
 for config_file in "${config_files[@]}"; do
     config_name="${config_file##*/}"
     config_name="${config_name%.json}"
-    python smoothing_experiment.py "$config_name"
+    python smoothing_experiment.py -c "$config_name"
 done
