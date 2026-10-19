@@ -74,7 +74,9 @@ that is implied by the CD-SSM. Standard particle filtering and smoothing methods
 as-well as Kalman filtering and smoothing, to this state space model. 
 """
 
+
 import numpy as np
+from math import sqrt
 import numpy.linalg as nla
 
 from particles.state_space_models import StateSpaceModel
@@ -367,7 +369,7 @@ class LampertiLogisticNegativeBinomialCDSSM(NegativeBinomialCDSSM):
         return 1.
 
     def SigmaY(self, t):
-        return 0.1625
+        return 1/(self.model_sde.theta_3 * sqrt(self.theta_4))
 
     def proposal_data_transform(self, data):
         return np.log(data)/self.model_sde.theta_3
