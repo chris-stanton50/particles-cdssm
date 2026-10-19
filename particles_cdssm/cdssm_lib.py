@@ -152,6 +152,34 @@ CDSSM_LIB = {
         'cdssm_params': {'x0': 600., 's_ts': 1., 'theta_4': 78.161},
     },
 
+    'LOGISTIC_NB_V_HIGH_CDT': {
+        'sde_cls': sdes.LogisticGrowthDiffusion,
+        'cdssm_cls': NegativeBinomialCDSSM,
+        'sde_params': {'theta_1': 2.397, 'theta_2': 4.429e-03, 'theta_3': 0.840},
+        'cdssm_params': {'x0': 600., 's_ts': 1., 'theta_4': 1.0693},
+    },
+
+    'LOGISTIC_NB_HIGH_CDT': {
+        'sde_cls': sdes.LogisticGrowthDiffusion,
+        'cdssm_cls': NegativeBinomialCDSSM,
+        'sde_params': {'theta_1': 2.397, 'theta_2': 4.429e-03, 'theta_3': 0.840},
+        'cdssm_params': {'x0': 600., 's_ts': 1., 'theta_4': 4.3027},
+    },
+
+    'LOGISTIC_NB_MED_CDT': {
+        'sde_cls': sdes.LogisticGrowthDiffusion,
+        'cdssm_cls': NegativeBinomialCDSSM,
+        'sde_params': {'theta_1': 2.397, 'theta_2': 4.429e-03, 'theta_3': 0.840},
+        'cdssm_params': {'x0': 600., 's_ts': 1., 'theta_4': 17.631},
+    },
+
+    'LOGISTIC_NB_LOW_CDT': {
+        'sde_cls': sdes.LogisticGrowthDiffusion,
+        'cdssm_cls': NegativeBinomialCDSSM,
+        'sde_params': {'theta_1': 2.397, 'theta_2': 4.429e-03, 'theta_3': 0.840},
+        'cdssm_params': {'x0': 600., 's_ts': 1., 'theta_4': 78.1608},
+    },
+
     'LAMPERTI_LOGISTIC_NB_V_HIGH': {
         'sde_cls': sdes.LampertiLogisticGrowthDiffusion,
         'cdssm_cls': LampertiLogisticNegativeBinomialCDSSM,
@@ -193,6 +221,50 @@ CDSSM_LIB = {
             'x0': np.log(600.) / 0.7,
             's_ts': 1.,
             'theta_4': 78.161,
+        },
+    },
+
+    'LAMPERTI_LOGISTIC_NB_LOW_CDT': {
+        'sde_cls': sdes.LampertiLogisticGrowthDiffusion,
+        'cdssm_cls': LampertiLogisticNegativeBinomialCDSSM,
+        'sde_params': {'theta_1': 2.397, 'theta_2': 4.429e-03, 'theta_3': 0.840},
+        'cdssm_params': {
+            'x0': np.log(600.) / 0.840,
+            's_ts': 1.,
+            'theta_4': 78.1608,
+        },
+    },
+
+    'LAMPERTI_LOGISTIC_NB_MED_CDT': {
+        'sde_cls': sdes.LampertiLogisticGrowthDiffusion,
+        'cdssm_cls': LampertiLogisticNegativeBinomialCDSSM,
+        'sde_params': {'theta_1': 2.397, 'theta_2': 4.429e-03, 'theta_3': 0.840},
+        'cdssm_params': {
+            'x0': np.log(600.) / 0.840,
+            's_ts': 1.,
+            'theta_4': 17.631,
+        },
+    },
+
+    'LAMPERTI_LOGISTIC_NB_HIGH_CDT': {
+        'sde_cls': sdes.LampertiLogisticGrowthDiffusion,
+        'cdssm_cls': LampertiLogisticNegativeBinomialCDSSM,
+        'sde_params': {'theta_1': 2.397, 'theta_2': 4.429e-03, 'theta_3': 0.840},
+        'cdssm_params': {
+            'x0': np.log(600.) / 0.840,
+            's_ts': 1.,
+            'theta_4': 4.3027,
+        },
+    },
+
+    'LAMPERTI_LOGISTIC_NB_V_HIGH_CDT': {
+        'sde_cls': sdes.LampertiLogisticGrowthDiffusion,
+        'cdssm_cls': LampertiLogisticNegativeBinomialCDSSM,
+        'sde_params': {'theta_1': 2.397, 'theta_2': 4.429e-03, 'theta_3': 0.840},
+        'cdssm_params': {
+            'x0': np.log(600.) / 0.840,
+            's_ts': 1.,
+            'theta_4': 1.0693,
         },
     },
 
