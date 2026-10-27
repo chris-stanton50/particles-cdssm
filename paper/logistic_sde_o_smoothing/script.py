@@ -249,6 +249,7 @@ def store_results(results_df: pd.DataFrame, config_name: str, ground_truth=False
         storage_path = f'./paper/logistic_sde_o_smoothing/results/{ground_truth_or_smc}/{local_or_remote}/r_{str(config_name)}'
     else:
         storage_path = f'./results/{ground_truth_or_smc}/{local_or_remote}/r_{str(config_name)}'
+    Path(storage_path).parent.mkdir(parents=True, exist_ok=True)
     print("Storing dataframe in json format")
     results_df.to_json(storage_path)
     print('Storage complete.')
