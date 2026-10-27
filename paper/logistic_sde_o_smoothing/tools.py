@@ -35,16 +35,17 @@ def wide_to_long(df: pd.DataFrame, config: dict):
     long_df['t'] = long_df['t'].astype(np.int64)
     return long_df
 
-def load(config_name: str) -> dict:
+def load(config_name: str, remote=False) -> dict:
     """
     Load the output dataframes from the numerical experiment, preprocess the outputs
     """
+    local_or_remote = 'remote' if remote else 'local'
     data = {}
     data['config'] = load_config(config_name)
-    data['smc_wide'] = pd.read_json('./results/smc/r_' + config_name)
+    data['smc_wide'] = pd.read_json(f'./results/smc/{local_or_remote}/r_' + config_name)
     data['smc_long'] = wide_to_long(data['smc_wide'], data['config'])
-    if 'run_lgssm' in data['config'] and data['config']['run_lgssm'] or 'lgssm' in data['config'] and data['config']['lgssm']:
-        data['ground_truth'] = pd.read_json('./results/ground_truth/r_' + config_name)
+    if ('run_lgssm' in data['config'] and data['config']['run_lgssm']) or ('lgssm' in data['config'] and data['config']['lgssm']):
+        data['ground_truth'] = pd.read_json(f'./results/ground_truth/{local_or_remote}/r_' + config_name)
         data['errors_wide'] = build_errors_df(data['smc_wide'], data['ground_truth'], data['config'])
         data['errors_long'] = wide_to_long(data['errors_wide'], data['config'])
     return data
